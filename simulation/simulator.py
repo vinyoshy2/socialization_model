@@ -1,6 +1,7 @@
 import numpy as np
 import json
 import sys
+import random 
 
 class TextBlob:
     def _preprocess(self, text):
@@ -95,7 +96,10 @@ class ModelSpecification:
 def genNetwork(model_spec):
     src_blobs = []
     # generate source documents
+    print("Generator source docs...")
     for i in range(0, model_spec.num_src_docs):
+        if i % 20 == 0:
+            print("{} out of {}...".format(i, model_spec.num_src_docs))
         cur_blob_size = model_spec.src_doc_sizes[i]
         cur_blob = []
         for j in range(0, cur_blob_size):
@@ -107,8 +111,12 @@ def genNetwork(model_spec):
     flattened_ind = 0
     tgt_blobs = []
     tgt_subreddits = []
+    print("Generating target docs...")
     for i in range(0, model_spec.num_tgt_subreddits):
         for j in range(0, model_spec.num_tgt_comments_per_sub[i]):
+            total_ind = sum(model_spec.num_tgt_comments_per_sub[:i]) + j
+            if total_ind % 100 == 0:
+                print("{} out of {}...".format(total_ind, model_spec.num_tgt_comments_per_sub[0]*model_spec.num_tgt_subreddits))
             tgt_subreddits.append(i)
             cur_blob_size = model_spec.tgt_comment_sizes[flattened_ind]
             cur_blob = []
@@ -125,31 +133,28 @@ def genNetwork(model_spec):
                 cur_blob.append(cur_word)
             flattened_ind += 1
             tgt_blobs.append(cur_blob)
-    print(tgt_subreddits)
     return TextNetwork(src_blobs, tgt_blobs, model_spec.edge_list, tgt_subreddits)
 
 def gen_specification(src_subs, tgt_subs, authors_per_tgt_sub, vocab_size, src_doc_size,
-                      tgt_doc_size, num_topics, edge_prob):
+                      tgt_doc_size, num_topics, edge_max):
  
     src_doc_sizes = [src_doc_size for i in range(0, src_subs)]
     tgt_comment_sizes = [tgt_doc_size for i in range(0, tgt_subs*authors_per_tgt_sub)]
     num_tgt_comments = [authors_per_tgt_sub for i in range(0, tgt_subs)]
  
-    phis = np.random.dirichlet([1 for i in range(0, vocab_size)], num_topics).tolist()
-    thetas = np.random.dirichlet([1 for i in range(0, num_topics)], src_subs).tolist()
-    psis = np.random.dirichlet([1 for i in range(0, num_topics)], tgt_subs).tolist()
+    phis = np.random.dirichlet([1/3 for i in range(0, vocab_size)], num_topics).tolist()
+    thetas = np.random.dirichlet([1/3 for i in range(0, num_topics)], src_subs).tolist()
+    psis = np.random.dirichlet([1/3 for i in range(0, num_topics)], tgt_subs).tolist()
     lambdas = np.random.beta(1,1,tgt_subs).tolist()
     edge_lists = []
     gammas = []
     for tgt_sub in range(tgt_subs):
         for author in range(authors_per_tgt_sub):
-            cur_edges = []
-            for src_sub in range(src_subs):
-                existence = np.random.binomial(n=1, p=edge_prob)
-                if existence:
-                    cur_edges.append(src_sub)
+            num_edges = np.random.randint(0, edge_max)
+            cur_edges = random.sample(list(range(src_subs)), k=num_edges)
+            cur_edges.sort()
             edge_lists.append(cur_edges)
-            gammas.append(np.random.dirichlet([1 for i in range(len(cur_edges))]).tolist())
+            gammas.append(np.random.dirichlet([1/3 for i in range(len(cur_edges))]).tolist())
     return ModelSpecification(
                 num_src_docs=src_subs,
                 src_doc_sizes=src_doc_sizes,
@@ -168,26 +173,12 @@ def gen_specification(src_subs, tgt_subs, authors_per_tgt_sub, vocab_size, src_d
 
 def main():
     dir_name = sys.argv[1]
-    model_spec = gen_specification(src_subs=100, tgt_subs=50, authors_per_tgt_sub=50, vocab_size=1000, src_doc_size=2000, tgt_doc_size=2000, num_topics=50, edge_prob=0.1)
+    model_spec = gen_specification(src_subs=1000, tgt_subs=500, authors_per_tgt_sub=100, vocab_size=10000, src_doc_size=1000, tgt_doc_size=100, num_topics=50, edge_max=20)
 
     textNetwork = genNetwork(model_spec)
-    textNetwork.write_to_files("inputs/{}".format(dir_name))
-    model_spec.to_file("inputs/{}/params.json".format(dir_name))
-
+    textNetwork.write_to_files("{}".format(dir_name))
+    model_spec.to_file("{}/params.json".format(dir_name))
+    return 
 if __name__ == "__main__": 
     main()
 
-#ModelSpecification(num_src_docs=3,
-#                                 src_doc_sizes=[2000, 2000, 2000],
-#                                 num_tgt_subreddits=2,
-#                                 num_tgt_comments=[8, 4],
-#                                 tgt_comment_sizes=[2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000],
-#                                 num_topics=2,
-#                                 vocab_size=5,
-#                                 vocab_vectors=np.array([[0.5, 0.5, 0, 0, 0], [0,0,0.33,0.33,0.34]]),
-#                                 src_topic_vectors=np.array([[0,1],[0.75,0.25],[0.5, 0.5]]),
-#                                 tgt_subreddit_topic_vectors=np.array([[1,0], [0,1]]),
-#                                 edge_list=[[0, 1, 2], [0,1], [1,2], [0, 2], [0], [1], [2], [], [1,2], [1], [2], []],
-#                                 edge_weights=[[0.6, 0.2, 0.2], [0.8, 0.2], [0.5, 0.5], [0.45, 0.55], [1], [1], [1], [],
-#                                               [0.5, 0.5], [1], [1], []],
-#                                 coin_flip_probs  = [0.2, 0.75])

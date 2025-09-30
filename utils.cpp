@@ -1,5 +1,6 @@
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <vector>
 #include <random>
 #include "utils.h"
@@ -45,8 +46,7 @@ std::vector<std::vector<int>> read2D(std::string filename) {
 
     // First line of the file will contain number of rows
     fin >> num_rows;
-    v.resize(num_rows);
-    
+    v.resize(num_rows);    
     int row_sizes[num_rows];
 
     // Next num_rows lines will contain number of elements in each row
@@ -57,16 +57,21 @@ std::vector<std::vector<int>> read2D(std::string filename) {
         v[i].resize(row_size);
         row_sizes[i] = row_size;
     }
- 
-    // Subsequent lines will contain the elements of the matrix
+    fin.get(); //read one token to account for trailing newline
+
+    std::string row;
     int c;
-    for (int i = 0; i < num_rows; i++) {
-        for (int j = 0; j < row_sizes[i]; j++) {
-            fin >> c;
-            v[i][j] = c;
-        }
+    int pos = 0;
+    while (std::getline(fin, row)) {
+        if (!row.empty()) {
+            std::istringstream row_split(row);
+            for (int j = 0; j < row_sizes[pos]; j++) {
+                row_split >> c;   
+                v[pos][j] = c;
+            }
+        } 
+        pos++;
     }
- 
     // Close the file
     fin.close();
     return v;

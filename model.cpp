@@ -1,5 +1,6 @@
 #include <vector>
 #include <iostream>
+#include <chrono>
 #include <random>
 #include <algorithm>
 #include "model.h"
@@ -19,13 +20,20 @@ CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int 
     std::mt19937 gen(rd());
 
     // Initialize src_N and tgt_N
-    src_N.resize(tgt_M);
+    src_N.resize(src_M);
     tgt_N.resize(tgt_M);
+    for (int i = 0; i < src_M; ++i) {
+        src_N[i] = text_network.src_blobs[i].size();
+    }
     for (int i = 0; i < tgt_M; ++i) {
-        src_N[i] = text_network.tgt_blobs[i].size();
         tgt_N[i] = text_network.tgt_blobs[i].size();
     } 
 
+    std::cout << "tgt_M: " << tgt_M << std::endl;
+    std::cout << "src_L: " << src_L << std::endl;
+    std::cout << "src_M: " << src_M << std::endl;
+    std::cout << "tgt_L: " << tgt_L << std::endl;
+    std::cout << "V: " << V << std::endl;
     // Initialize count matrices
     dc.resize(tgt_M, std::vector<int>(src_L + 1, 0));
     ct.resize(src_L + 1, std::vector<int>(k, 0));
@@ -51,9 +59,16 @@ void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, bool verbose) {
         std::cout << "\n========== START SAMPLER ==========" << std::endl;
     }
 
+    // Set up timer
+    using std::chrono::high_resolution_clock;
+    using std::chrono::duration_cast;
+    using std::chrono::duration;
+    using std::chrono::milliseconds;
+
+    auto t1 = high_resolution_clock::now();
     // Run Gibbs sampler
     for (int iter = 0; iter < n_gibbs; ++iter) {
-
+        
         // Update source subreddit documents
         for (int c_ = 0; c_ < src_M; ++c_) {
             for (int n = 0; n < src_N[c_]; ++n) {
@@ -73,6 +88,10 @@ void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, bool verbose) {
         // Print progress every 200 iterations
         if (verbose && (iter + 1) % 200 == 0) {
             std::cout << "\n===== ITERATION " << iter << " =====" << std::endl;
+            auto t2 = high_resolution_clock::now();
+            duration<double, std::milli> ms_double = t2 - t1;
+            std::cout << ms_double.count() << "ms\n";
+            t1 = high_resolution_clock::now();
         }
     }
 }
@@ -296,7 +315,6 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
     // Max lengths
     int src_N_max = *max_element(src_N.begin(), src_N.end());
     int tgt_N_max = *max_element(tgt_N.begin(), tgt_N.end());
-
     // Resize assignment matrices
     assign_c.resize(tgt_M, std::vector<std::vector<int>>(tgt_N_max, std::vector<int>(n_gibbs + 1, 0)));
     assign_s.resize(tgt_M, std::vector<std::vector<int>>(tgt_N_max, std::vector<int>(n_gibbs + 1, 0)));
@@ -322,8 +340,8 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
     // Random number generator
     std::uniform_int_distribution<int> topic_dist(0, k - 1);
     std::uniform_int_distribution<int> binary_dist(0, 1);
-
     // Initialize values for each src comment
+
     for (int d = 0; d < src_M; ++d) {
         for (int n = 0; n < src_N[d]; ++n) {
             int w_dn = text_network.src_blobs[d][n];

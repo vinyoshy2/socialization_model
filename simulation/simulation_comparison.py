@@ -103,16 +103,18 @@ def compare_spec(ground_truth, iter_results, name):
                                             "Probability": iter_results[vec][vec_ind][iteration]})
         cur_ax = axes[i]
         g = sns.pointplot(ax=cur_ax, data=pd.DataFrame.from_records(records),
-                      x="Index", y="Probability", hue="Type", errorbar=("pi", 95), linestyle="")
+                      x="Index", y="Probability", hue="Type", errorbar=("pi", 95), linestyles="")
         plt.setp(g.collections, alpha=0.5)
         cur_ax.set_ylim(0, 1)
         cur_ax.set_title("{} {}".format(name, vec))
-    plt.savefig("../figures/{}/{}.pdf".format(folder, name))
+    plt.savefig("{}/{}.pdf".format(plots_folder, name))
     return fig
 
-folder = sys.argv[1]
-params = read_params("../inputs/{}/params.json".format(folder))
-#inferred_gammas = produce_samples_dirichlet(read3D("../results/{}/gamma.txt".format(folder)), params["edge_list"])
+params_folder = sys.argv[1]
+model_output_folder = sys.argv[2]
+plots_folder = sys.argv[3]
+params = read_params("{}/params.json".format(params_folder))
+#inferred_gammas = produce_samples_dirichlet(read3D("{}/gamma.txt".format(model_output_folder)), params["edge_list"])
 
 #the ground truth values for gamma need special handling because the edge weight adjacency list is ragged
 #gt_gammas = np.zeros((inferred_gammas.shape[0], inferred_gammas.shape[1]))
@@ -120,10 +122,10 @@ params = read_params("../inputs/{}/params.json".format(folder))
 #    for pos, j in enumerate(params["edge_list"][i]):
 #        gt_gammas[i, j] = params["edge_weights"][i][pos]
 
-#inferred_phis = produce_samples_dirichlet(read3D("../results/{}/phi.txt".format(folder)))
-#inferred_psis = produce_samples_dirichlet(read3D("../results/{}/psi.txt".format(folder)))
-#inferred_thetas = produce_samples_dirichlet(read3D("../results/{}/theta.txt".format(folder)))
-lambda_pseudocounts = read3D("../results/{}/lambda.txt".format(folder))
+#inferred_phis = produce_samples_dirichlet(read3D("{}/phi.txt".format(model_output_folder)))
+#inferred_psis = produce_samples_dirichlet(read3D("{}/psi.txt".format(model_output_folder)))
+#inferred_thetas = produce_samples_dirichlet(read3D("{}/theta.txt".format(model_ouptut_folder)))
+lambda_pseudocounts = read3D("{}/lambda.txt".format(model_output_folder))
 inferred_lambdas = produce_samples_beta(lambda_pseudocounts)
 #the ground truth lambdas also need to be made into a 2D array
 gt_lambdas = np.zeros((inferred_lambdas.shape[0], inferred_lambdas.shape[1]))

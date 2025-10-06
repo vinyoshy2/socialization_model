@@ -173,7 +173,7 @@ def gen_specification(src_subs, tgt_subs, authors_per_tgt_sub, vocab_size, src_d
 
 def main():
     dir_name = sys.argv[1]
-    model_spec = gen_specification(src_subs=1000, tgt_subs=500, authors_per_tgt_sub=100, vocab_size=10000, src_doc_size=1000, tgt_doc_size=100, num_topics=50, edge_max=20)
+    model_spec = gen_specification(src_subs=1000, tgt_subs=500, authors_per_tgt_sub=100, vocab_size=10000, src_doc_size=500, tgt_doc_size=100, num_topics=50, edge_max=10)
 
     textNetwork = genNetwork(model_spec)
     textNetwork.write_to_files("{}".format(dir_name))

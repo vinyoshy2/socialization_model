@@ -62,6 +62,7 @@ std::vector<std::vector<int>> read2D(std::string filename) {
     std::string row;
     int c;
     int pos = 0;
+    std::getline(fin, row); // will have a row of whitespace to get rid of
     while (std::getline(fin, row)) {
         if (!row.empty()) {
             std::istringstream row_split(row);

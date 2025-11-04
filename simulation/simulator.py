@@ -36,16 +36,16 @@ class TextNetwork:
 
     def write_2d_mat(self, loc, mat):
         with open(loc, "w+") as f:
-            f.write("{} \n".format(len(mat)))
+            f.write("{}\n".format(len(mat)))
             for i in range(len(mat)):
-                f.write("{} \n".format(len(mat[i])))
+                f.write("{}\n".format(len(mat[i])))
             for i in range(len(mat)):
-                f.write("{} \n".format(" ".join([str(j) for j in mat[i]])))
+                f.write("{}\n".format(" ".join([str(j) for j in mat[i]])))
         return
     def write_1d_mat(self, loc, mat):
         with open(loc, "w+") as f:
-            f.write("{} \n".format(len(mat)))
-            f.write("{} \n".format(" ".join([str(j) for j in mat])))
+            f.write("{}\n".format(len(mat)))
+            f.write("{}\n".format(" ".join([str(j) for j in mat])))
         return
 
     def write_to_files(self, folder):
@@ -173,7 +173,7 @@ def gen_specification(src_subs, tgt_subs, authors_per_tgt_sub, vocab_size, src_d
 
 def main():
     dir_name = sys.argv[1]
-    model_spec = gen_specification(src_subs=1000, tgt_subs=500, authors_per_tgt_sub=100, vocab_size=10000, src_doc_size=500, tgt_doc_size=100, num_topics=50, edge_max=10)
+    model_spec = gen_specification(src_subs=3, tgt_subs=3, authors_per_tgt_sub=4, vocab_size=5, src_doc_size=5000, tgt_doc_size=5000, num_topics=2, edge_max=3)
 
     textNetwork = genNetwork(model_spec)
     textNetwork.write_to_files("{}".format(dir_name))

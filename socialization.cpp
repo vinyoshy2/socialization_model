@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
     //vocab size is 1 larger than the largest word index
     vocab_size++;
 
-    const TextNetwork text_network = {src_blobs, tgt_blobs, edges, tgt_subreddits, vocab_size, num_src_subreddits, num_tgt_subreddits};
+    const TextNetwork text_network = {src_blobs, tgt_blobs, edges, tgt_subreddits, vocab_size, num_src_subreddits, num_tgt_subreddits};    
 
     //Initialize model
     CollapsedGibbsSocLDA model(text_network, 50);

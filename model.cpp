@@ -306,9 +306,6 @@ std::vector<std::vector<std::vector<double>>> CollapsedGibbsSocLDA::recover_lamb
     return lambdas;
 }
 
-
-
-
 // Initialize the Gibbs sampler
 void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
     

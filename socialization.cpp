@@ -22,6 +22,9 @@ int main(int argc, char** argv) {
     std::vector<std::vector<int>> edges = read2D(edges_file);
     std::vector<int> tgt_subreddits = read1D(subreddits_file);  
 
+    int iterations = 2000;
+    int warmup = 500;
+
     int num_src_subreddits = src_blobs.size();
     
     //deduce number of target subreddits from subreddits vector
@@ -52,14 +55,14 @@ int main(int argc, char** argv) {
     CollapsedGibbsSocLDA model(text_network, 50);
 
     //Run Gibbs sampler
-    model.run_gibbs(2000, true);
+    model.run_gibbs(iterations, true);
 
     //Recover parameters
-    std::vector<std::vector<std::vector<double>>> gamma = model.recover_gamma(2000, 500);
-    std::vector<std::vector<std::vector<double>>> psi = model.recover_psi(2000, 500);
-    std::vector<std::vector<std::vector<double>>> phi = model.recover_phi(2000, 500);
-    std::vector<std::vector<std::vector<double>>> theta = model.recover_theta(2000, 500);
-    std::vector<std::vector<std::vector<double>>> lambda = model.recover_lambda(2000, 500);
+    std::vector<std::vector<std::vector<double>>> gamma = model.recover_gamma(iterations, warmup);
+    std::vector<std::vector<std::vector<double>>> psi = model.recover_psi(iterations, warmup);
+    std::vector<std::vector<std::vector<double>>> phi = model.recover_phi(iterations, warmup);
+    std::vector<std::vector<std::vector<double>>> theta = model.recover_theta(iterations, warmup);
+    std::vector<std::vector<std::vector<double>>> lambda = model.recover_lambda(iterations, warmup);
 
     //Save to parameters to output file   
     write3D(output_dir + "/gamma.txt", gamma);

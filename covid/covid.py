@@ -6,11 +6,57 @@ import sys
 import json
 import random 
 
-MONTHS = int(sys.argv[1])
-TOPICS = int(sys.argv[2])
+#TOPICS = int(sys.argv[2])
 
-RESULTS_FOLDER = f"data/results/topics-{TOPICS}"
+INPUTS_FOLDER = sys.argv[1]
+RESULTS_FOLDER = sys.argv[2]
+MONTH = int(sys.argv[3])
+RESULTS_FOLDER = "{}/{}/".format(RESULTS_FOLDER, MONTH)
+INPUTS_FOLDER = "{}/{}/".format(INPUTS_FOLDER, MONTH)
 SUBREDDIT_NAMES = {0: "coronavirus", 1: "china_flu"}
+
+#don't use this function long term, i think theres some incorrect approximinations (mean of means type stuff)
+def read3D_sample_remap_space_efficient(file_loc, topk, idx2val=None):
+    output = []
+    with open(file_loc) as f:
+        # Read first dimension (number of subreddits)
+        dim1 = int(f.readline()) # = 2 (coronavirus, china_flu)
+
+        # Read second dimension (components per subreddit; probability pairs)
+        dim2s = []
+        for i in range(0, dim1):
+            dim2s.append(int(f.readline())) # = [2, 2]
+
+        # Read third dimension  (iterations per component; MCMC samples)
+        dim3s = []
+        for i in range(0, dim1):
+            dim3s.append([])
+            for j in range(0, dim2s[i]):
+                dim3s[i].append(int(f.readline())) # = [[1500, 1500], [1500, 1500]]
+    
+        outer_dim = 0
+        inner_dim = 0
+        # Populate output 3D list
+        pos = 0
+        output = []
+        while outer_dim < dim1:
+            cur_row = []
+            while inner_dim < dim2s[outer_dim]:
+                cur_line = f.readline()
+                if cur_line.strip() != "":
+                    nums = [int(val) for val in cur_line.split()]
+                    if len(nums) <= 0:
+                        print("~~~~{}~~~~".format(cur_line))
+                    avg_num = np.mean(nums)
+                    cur_row.append(avg_num)
+                    inner_dim += 1
+            row_norm = sum(cur_row)
+            cur_row = [elem / row_norm for elem in cur_row]
+            remapped_row = remap_vector(cur_row, topk, idx2val)
+            output.append(remapped_row)
+            outer_dim += 1
+            inner_dim = 0
+    return output
 
 def read3D(file_loc):
     output = []
@@ -65,6 +111,11 @@ def readEdges(file_loc):
 
     return edges
 
+def readJSON(file_loc):
+    with open(file_loc) as f:
+        data = json.load(f)
+    return data
+
 def produce_samples_beta(iter_results):
     # Get dimensions from input array
     num_subreddits = iter_results.shape[0]  # 2 subreddits
@@ -105,9 +156,6 @@ def produce_samples_dirichlet(iter_results, non_zero_list = None):
                 params = [orig_params[i] for i in non_zero_list[cur_vector]]
             else:
                 params = orig_params
-            print(cur_vector, non_zero_list[cur_vector])
-            print(orig_params, np.count_nonzero(orig_params))
-            print(params)
             sampled_vector = np.random.dirichlet(params)
 
             if non_zero_list != None:
@@ -180,18 +228,70 @@ def compare_gamma(all_records):
             f.write(f"{idx:2d}   | {source_name:30s} | {val:.4f}\n")
 
 
+def remap_vector(vector, topk, idx2vocab=None):
+    if idx2vocab != None:
+        pairs = [(idx2vocab[str(j)], value) for j, value in enumerate(vector)]
+    else:
+        pairs = [(j, value) for j, value in enumerate(vector)]
+    pairs.sort(key = lambda x: x[1], reverse=True)
+    return pairs[:topk]
+
+def display_topic(topic_pairs):
+    row_str = " | ".join(["{} ({})".format(pair[0], pair[1]) for pair in topic_pairs])
+    print(row_str)
+
+def display_topics(topic_vectors):
+    for i, topic_vector in enumerate(topic_vectors):
+        print("--- Topic {} ---".format(i))
+        display_topic(topic_vector)
+
+
+
+def display_document_preprocessed(documents, vocab_vectors, idx2subreddit):
+    for i in range(len(documents)):
+        cur_sub = idx2subreddit[str(i)]
+        doc_row = documents[i]
+        print(doc_row)
+        print("================= {} =================".format(cur_sub))
+        for k in range(len(doc_row)):
+            cur_topic = doc_row[k][0]
+            cur_topic_prop = doc_row[k][1]
+            print("--- Topic {} ({}) ---".format(cur_topic, cur_topic_prop))
+            display_topic(vocab_vectors[cur_topic])
+
 if __name__ == "__main__":
-    ### LAMBDA ###
-    # all_records = []
-    # for month in range(1, MONTHS + 1):
-    #     lambda_pseudocounts = read3D(f"{RESULTS_FOLDER}/{month}/lambda.txt")
-    #     inferred_lambdas = produce_samples_beta(lambda_pseudocounts)
-    #     all_records.append((month, inferred_lambdas))
-    # graph_lambda(all_records)
+    #### LAMBDA ###
+#    all_records = []
+#    lambda_pseudocounts = read3D(f"{RESULTS_FOLDER}/lambda.txt")
+#    inferred_lambdas = produce_samples_beta(lambda_pseudocounts)
+#    all_records.append((MONTH, inferred_lambdas))
+#    graph_lambda(all_records)
 
     ### GAMMA ###
-    edges = readEdges(f"data/1/edges.txt")
-    gamma_pseudocounts = read3D(f"{RESULTS_FOLDER}/1/gamma.txt")
-    inferred_gammas = produce_samples_dirichlet(gamma_pseudocounts, edges)
+    #edges = readEdges(f"../inputs/1/edges.txt")
+    #gamma_pseudocounts = read3D("../results/1/gamma.txt")
+    #inferred_gammas = produce_samples_dirichlet(gamma_pseudocounts, edges)
     # compare_gamma(inferred_gammas)
     
+    ### TOPIC VECTORS  ###
+    
+    #read in files for converting indices to words/surbeddits
+    idx2vocab = readJSON("{}/idx2vocab.json".format(INPUTS_FOLDER))
+    idx2tgt_pair = readJSON("{}/idx2tgt_pair.json".format(INPUTS_FOLDER))
+    idx2tgt_sub = readJSON("{}/idx2tgt_sub.json".format(INPUTS_FOLDER))
+    idx2src_sub = readJSON("{}/idx2src_sub.json".format(INPUTS_FOLDER))
+    print("read in jsons")
+
+    #read in and compute posteriors
+    phi = read3D_sample_remap_space_efficient("{}/phi.txt".format(RESULTS_FOLDER), 40, idx2val=idx2vocab)
+    #display_topics(phi)
+    psi = read3D_sample_remap_space_efficient("{}/psi.txt".format(RESULTS_FOLDER), 10, idx2val=None)
+    #theta = read3D_sample_remap_space_efficient("{}/theta.txt".format(RESULTS_FOLDER), 10, idx2val=None)
+    display_document_preprocessed(psi, phi, idx2tgt_sub)
+    #display_document_preprocessed(theta, phi, idx2src_sub)
+
+
+
+
+    
+#

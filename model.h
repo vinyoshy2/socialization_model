@@ -71,7 +71,7 @@ private:
 
     void init_gibbs(int n_gibbs);
 
-    std::vector<double> conditional_prob_cs(int w_dn, int d, int r, int t);
+    std::vector<double> conditional_prob_cs(int w_dn, int d, int r, int t, bool print);
 
     std::vector<double> conditional_prob_t(int w_dn, int d, int r, int c, int s);
 

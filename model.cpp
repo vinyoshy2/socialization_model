@@ -17,7 +17,7 @@ CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int 
         lambda_theta(1.0), lambda_psi(1.0) {
     
     // prepare rng
-    std::mt19937 gen(rd());
+    gen = std::mt19937(std::random_device{}());
 
     // Initialize src_N and tgt_N
     src_N.resize(src_M);
@@ -29,6 +29,7 @@ CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int 
         tgt_N[i] = text_network.tgt_blobs[i].size();
     } 
 
+    std::cout << "n_topic: " << n_topic << std::endl;
     std::cout << "tgt_M: " << tgt_M << std::endl;
     std::cout << "src_L: " << src_L << std::endl;
     std::cout << "src_M: " << src_M << std::endl;
@@ -84,7 +85,7 @@ void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, bool verbose) {
                 update_cs(d, n, r, iter, iter + 1);
             }
         }
-
+        
         // Print progress every 200 iterations
         if (verbose && (iter + 1) % 200 == 0) {
             std::cout << "\n===== ITERATION " << iter << " =====" << std::endl;
@@ -338,7 +339,7 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
     std::uniform_int_distribution<int> topic_dist(0, k - 1);
     std::uniform_int_distribution<int> binary_dist(0, 1);
     // Initialize values for each src comment
-
+    std::cout << "Init'ing src vals" << std::endl;
     for (int d = 0; d < src_M; ++d) {
         for (int n = 0; n < src_N[d]; ++n) {
             int w_dn = text_network.src_blobs[d][n];
@@ -352,6 +353,7 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
         }
     }
 
+    std::cout << "Init'ing tgt vals" << std::endl;
     // Initialize values for each tgt comment
     for (int d = 0; d < tgt_M; ++d) {
         int r = text_network.tgt_subreddits[d];
@@ -396,9 +398,12 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
             }
         }
     }
+    for (int r = 0; r < tgt_L; r++) {
+        std::cout << forced_innovation_count[r] << std::endl;
+    }
 }
 
-std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, int r, int t) {
+std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, int r, int t, bool print) {
     size_t edge_count = text_network.edges[d].size();
     std::vector<double> prob(edge_count + 1, 0.0);
 
@@ -475,7 +480,9 @@ void CollapsedGibbsSocLDA::update_cs(int d, int n, int r, int cs_iter, int t_ite
     int i_t = assign_t[d][n][t_iter];
     int i_c = assign_c[d][n][cs_iter];
     int i_s = assign_s[d][n][cs_iter];
-
+    /*if (d == 0 && n == 0) {
+        std::cout << "Current c: " << i_c << " Current s: " << i_s << std::endl;
+    }*/
     // Decrement counters
     dc[d][i_c]--;
     rts[r][i_t][i_s]--;
@@ -489,9 +496,15 @@ void CollapsedGibbsSocLDA::update_cs(int d, int n, int r, int cs_iter, int t_ite
     }
 
     // Compute new assignment probabilities
-    std::vector<double> prob = conditional_prob_cs(w_dn, d, r, i_t);
+    std::vector<double> prob = conditional_prob_cs(w_dn, d, r, i_t, d==0 && n==0);
+    
+    /*if (d == 0 && n == 0) {
+        for (int counter = 0; counter < edges.size()+1; counter++ ) {
+            std::cout << prob[counter] << " "; 
+        }
+        std::cout << std::endl;
+    }*/
     int result = weighted_sample(prob, gen);
-
     int new_s = (result == edges.size()) ? 1 : 0;
     int new_c = (new_s == 1) ? src_L : edges[result];
 

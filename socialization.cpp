@@ -19,11 +19,18 @@ int main(int argc, char** argv) {
     //Read dataset in from file
     std::vector<std::vector<int>> src_blobs = read2D(src_blobs_file);
     std::vector<std::vector<int>> tgt_blobs = read2D(tgt_blobs_file);
-    std::vector<std::vector<int>> edges = read2D(edges_file);
     std::vector<int> tgt_subreddits = read1D(subreddits_file);  
+    std::vector<std::vector<int>> edges = read2D(edges_file);
+    
+    //zeros out all edges if you want to run vanilla LDA
+   //std::vector<std::vector<int>> edges;
+   // for (int i = 0; i < tgt_subreddits.size(); i ++ ) {
+//	std::vector<int> empty;
+//	edges.push_back(empty);
+  //  }
 
-    int iterations = 2000;
-    int warmup = 500;
+    int iterations = 1000;
+    int warmup = 1;
 
     int num_src_subreddits = src_blobs.size();
     
@@ -50,9 +57,11 @@ int main(int argc, char** argv) {
     vocab_size++;
 
     const TextNetwork text_network = {src_blobs, tgt_blobs, edges, tgt_subreddits, vocab_size, num_src_subreddits, num_tgt_subreddits};    
+    std::cout << "Made Text network" << std::endl;
 
     //Initialize model
     CollapsedGibbsSocLDA model(text_network, 50);
+    std::cout << "Initalized" << std::endl;
 
     //Run Gibbs sampler
     model.run_gibbs(iterations, true);

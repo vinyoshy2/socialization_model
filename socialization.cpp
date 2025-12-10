@@ -10,11 +10,12 @@
 int main(int argc, char** argv) {
 
     //Parse command line arguments
-    std::string src_blobs_file(argv[1]);
-    std::string tgt_blobs_file(argv[2]);
-    std::string edges_file(argv[3]);
-    std::string subreddits_file(argv[4]);
-    std::string output_dir(argv[5]);
+    int num_topics = std::stoi(argv[1]);
+    std::string src_blobs_file(argv[2]);
+    std::string tgt_blobs_file(argv[3]);
+    std::string edges_file(argv[4]);
+    std::string subreddits_file(argv[5]);
+    std::string output_dir(argv[6]);
 
     //Read dataset in from file
     std::vector<std::vector<int>> src_blobs = read2D(src_blobs_file);
@@ -60,7 +61,7 @@ int main(int argc, char** argv) {
     std::cout << "Made Text network" << std::endl;
 
     //Initialize model
-    CollapsedGibbsSocLDA model(text_network, 50);
+    CollapsedGibbsSocLDA model(text_network, num_topics);
     std::cout << "Initalized" << std::endl;
 
     //Run Gibbs sampler

@@ -13,7 +13,7 @@ CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int 
     : text_network(text_network), V(text_network.vocab_size), k(n_topic),
         src_M(text_network.src_blobs.size()), tgt_M(text_network.tgt_blobs.size()),
         src_L(text_network.num_src_subreddits), tgt_L(text_network.num_tgt_subreddits),
-        alpha_phi(1.0), alpha_theta(1.0), alpha_gamma(1.0), alpha_psi(1.0),
+        alpha_phi(1.0 / n_topic), alpha_theta(1.0 / n_topic), alpha_gamma(1.0 / text_network.num_src_subreddits), alpha_psi(1.0 / text_network.vocab_size),
         lambda_theta(1.0), lambda_psi(1.0) {
     
     // prepare rng

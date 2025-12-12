@@ -9,15 +9,16 @@
 
 
 // Constructor
-CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int n_topic) 
+CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int n_topic, float alpha_sum_topics, float alpha_sum_vocab, float alpha_sum_edges) 
     : text_network(text_network), V(text_network.vocab_size), k(n_topic),
         src_M(text_network.src_blobs.size()), tgt_M(text_network.tgt_blobs.size()),
         src_L(text_network.num_src_subreddits), tgt_L(text_network.num_tgt_subreddits),
-        alpha_phi(1.0 / n_topic), alpha_theta(1.0 / n_topic), alpha_gamma(1.0 / text_network.num_src_subreddits), alpha_psi(1.0 / text_network.vocab_size),
+        alpha_phi(alpha_sum_vocab / text_network.vocab_size), alpha_theta(alpha_sum_topics / n_topic), alpha_psi(alpha_sum_topics / n_topic), alpha_sum_edges(alpha_sum_edges),
         lambda_theta(1.0), lambda_psi(1.0) {
     
     // prepare rng
     gen = std::mt19937(std::random_device{}());
+   
 
     // Initialize src_N and tgt_N
     src_N.resize(src_M);
@@ -121,7 +122,7 @@ std::vector<std::vector<std::vector<double>>> CollapsedGibbsSocLDA::recover_gamm
             int edge = text_network.edges[d][i];
             double sum_val = 0.0;
             for (int iter = num_warmup; iter < total_iter; ++iter) {
-                double numerator = tmp_counts[d][edge][iter - num_warmup] + alpha_gamma;
+                double numerator = tmp_counts[d][edge][iter - num_warmup] + (alpha_sum_edges/num_edges);
                 /*double denominator = 0.0;
                 for (int j = 0; j < src_L; ++j) {
                     denominator += tmp_counts[d][j][iter - num_warmup];
@@ -411,7 +412,7 @@ std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, i
         int i = text_network.edges[d][ind];
 
         double _1 = (c_t_[i][t] + ct[i][t] + alpha_theta) / (src_N[i] + c_sum[i] + k * alpha_theta);
-        double _2 = (dc[d][i] + alpha_gamma) / (d_cited_sum[d] + edge_count * alpha_gamma);
+        double _2 = (dc[d][i] + (alpha_sum_edges/edge_count)) / (d_cited_sum[d] + edge_count * (alpha_sum_edges/edge_count));
         double _3 = (r0_sum[r] + lambda_theta)
                     / (r0_sum[r] + r1_sum[r] - forced_innovation_count[r] + lambda_theta + lambda_psi);
 

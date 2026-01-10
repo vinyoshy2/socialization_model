@@ -6,13 +6,15 @@ import sys
 import json
 import random 
 
-#TOPICS = int(sys.argv[2])
 
 INPUTS_FOLDER = sys.argv[1]
 RESULTS_FOLDER = sys.argv[2]
-MONTH = int(sys.argv[3])
-RESULTS_FOLDER = "{}/{}/".format(RESULTS_FOLDER, MONTH)
-INPUTS_FOLDER = "{}/{}/".format(INPUTS_FOLDER, MONTH)
+TOPICS = int(sys.argv[3])
+START_MONTH = int(sys.argv[4])
+END_MONTH = int(sys.argv[5])
+
+INPUTS_FOLDER = "{}".format(INPUTS_FOLDER)
+# RESULTS_FOLDER = "{}/K={}".format(RESULTS_FOLDER, TOPICS)
 SUBREDDIT_NAMES = {0: "coronavirus", 1: "china_flu"}
 
 #don't use this function long term, i think theres some incorrect approximinations (mean of means type stuff)
@@ -171,6 +173,7 @@ def graph_lambda(all_records):
     fig, axes = plt.subplots(figsize=(9, 6))
     records = []
     for month, iter_results in all_records:
+        print(iter_results.shape)
         num_vectors = iter_results.shape[0]
         vector_size = iter_results.shape[1]
         num_iters = iter_results.shape[2]
@@ -184,12 +187,56 @@ def graph_lambda(all_records):
                                     "Iter": iteration,
                                     "Probability": iter_results[vec][0][iteration]})
 
+    df = pd.DataFrame.from_records(records)
+    print(df.groupby(["Month", "Subreddit"])["Probability"].mean())
+
     g = sns.lineplot(ax=axes, data=pd.DataFrame.from_records(records),
                 x="Month", y="Probability", hue="Subreddit", marker='o', errorbar=("pi", 95), alpha=0.7)
     plt.setp(g.collections, alpha=0.5)
     axes.set_ylim(0, 1)
     axes.set_title("Lambda over Time")
     plt.savefig(f"{RESULTS_FOLDER}/Lambda.pdf")
+    return fig
+
+def graph_lambda_by_iters(all_records): 
+    fig, axes = plt.subplots(figsize=(9, 6), nrows=len(all_records), ncols=1,)
+    for index, (month, iter_results) in enumerate(all_records):
+        records = []
+        num_vectors = iter_results.shape[0]
+        vector_size = iter_results.shape[1]
+        num_iters = iter_results.shape[2]
+
+        sub_sample_vectors = list(range(num_vectors))
+        for i, vec in enumerate(sub_sample_vectors):
+            for vec_ind in range(vector_size):
+                for iteration in range(num_iters):
+                    iter_group = iteration // 500
+                    records.append({"Subreddit": SUBREDDIT_NAMES[vec_ind],
+                                    "Month": month,
+                                    "IterGroup": iteration // 500,
+                                    "Iteration": iteration,
+                                    "Probability": iter_results[vec][0][iteration]})
+
+        # Create DataFrame first
+        df = pd.DataFrame.from_records(records)
+
+        # Verification: Print iteration ranges for each group
+        print(f"Month {month} - Iteration group ranges:")
+        for group in sorted(df['IterGroup'].unique()):
+            group_iters = df[df['IterGroup'] == group]['Iteration']
+            print(f"  Group {group}: iterations {group_iters.min()}-{group_iters.max()} (count: {len(group_iters)})")
+        
+        df = pd.DataFrame.from_records(records)
+        print(df.groupby(["IterGroup", "Subreddit"])["Probability"].mean())
+
+        cur_ax = axes[index]
+        g = sns.lineplot(ax=cur_ax, data=pd.DataFrame.from_records(records),
+                    x="IterGroup", y="Probability", hue="Subreddit", marker='o', errorbar=("pi", 95), alpha=0.7)
+        plt.setp(g.collections, alpha=0.5)
+        cur_ax.set_ylim(0, 1)
+        cur_ax.set_title(f"Month {month}")
+
+    plt.savefig(f"{RESULTS_FOLDER}/Lambda_by_iters.pdf")
     return fig
 
 
@@ -261,34 +308,48 @@ def display_document_preprocessed(documents, vocab_vectors, idx2subreddit):
 
 if __name__ == "__main__":
     #### LAMBDA ###
-#    all_records = []
-#    lambda_pseudocounts = read3D(f"{RESULTS_FOLDER}/lambda.txt")
-#    inferred_lambdas = produce_samples_beta(lambda_pseudocounts)
-#    all_records.append((MONTH, inferred_lambdas))
-#    graph_lambda(all_records)
+    from pathlib import Path
+    print("========== Topics=1000, Iter=2000, Warmup=500 ==========")
+    for aT in ["0.01", "0.1", "1.0"]:
+        for aV in ["0.01", "0.1", "1.0"]:
+            for aE in ["0.01", "0.1", "1.0"]:
+                if Path(f"{RESULTS_FOLDER}/k100_i2000_w500_aT{aT}_aV{aV}_aE{aE}").is_dir():
+                    print(f"alpha_sum_topics={aT}, alpha_sum_vocab={aV}, alpha_edges={aE}", end="")
+                    lambda_pseudocounts = read3D(f"{RESULTS_FOLDER}/k100_i2000_w500_aT{aT}_aV{aV}_aE{aE}/2/lambda.txt")
+                    inferred_lambdas = produce_samples_beta(lambda_pseudocounts)
+                    graph_lambda([(2, inferred_lambdas)])
+                    print("\n")
+
+    # all_records = []
+    # for MONTH in range(START_MONTH, END_MONTH + 1):
+    #     lambda_pseudocounts = read3D(f"{RESULTS_FOLDER}/{MONTH}/lambda.txt")
+    #     inferred_lambdas = produce_samples_beta(lambda_pseudocounts)
+    #     all_records.append((MONTH, inferred_lambdas))
+    # graph_lambda(all_records)
+    # graph_lambda_by_iters(all_records)
 
     ### GAMMA ###
     #edges = readEdges(f"../inputs/1/edges.txt")
     #gamma_pseudocounts = read3D("../results/1/gamma.txt")
     #inferred_gammas = produce_samples_dirichlet(gamma_pseudocounts, edges)
     # compare_gamma(inferred_gammas)
-    
-    ### TOPIC VECTORS  ###
-    
-    #read in files for converting indices to words/surbeddits
-    idx2vocab = readJSON("{}/idx2vocab.json".format(INPUTS_FOLDER))
-    idx2tgt_pair = readJSON("{}/idx2tgt_pair.json".format(INPUTS_FOLDER))
-    idx2tgt_sub = readJSON("{}/idx2tgt_sub.json".format(INPUTS_FOLDER))
-    idx2src_sub = readJSON("{}/idx2src_sub.json".format(INPUTS_FOLDER))
-    print("read in jsons")
 
-    #read in and compute posteriors
-    phi = read3D_sample_remap_space_efficient("{}/phi.txt".format(RESULTS_FOLDER), 40, idx2val=idx2vocab)
-    #display_topics(phi)
-    psi = read3D_sample_remap_space_efficient("{}/psi.txt".format(RESULTS_FOLDER), 10, idx2val=None)
-    #theta = read3D_sample_remap_space_efficient("{}/theta.txt".format(RESULTS_FOLDER), 10, idx2val=None)
-    display_document_preprocessed(psi, phi, idx2tgt_sub)
-    #display_document_preprocessed(theta, phi, idx2src_sub)
+    ### TOPIC VECTORS  ###
+
+    #read in files for converting indices to words/surbeddits
+    # idx2vocab = readJSON("{}/idx2vocab.json".format(INPUTS_FOLDER))
+    # idx2tgt_pair = readJSON("{}/idx2tgt_pair.json".format(INPUTS_FOLDER))
+    # idx2tgt_sub = readJSON("{}/idx2tgt_sub.json".format(INPUTS_FOLDER))
+    # idx2src_sub = readJSON("{}/idx2src_sub.json".format(INPUTS_FOLDER))
+    # print("read in jsons")
+
+    # #read in and compute posteriors
+    # phi = read3D_sample_remap_space_efficient("{}/{}/phi.txt".format(RESULTS_FOLDER, START_MONTH), 40, idx2val=idx2vocab)
+    # #display_topics(phi)
+    # psi = read3D_sample_remap_space_efficient("{}/{}/psi.txt".format(RESULTS_FOLDER, START_MONTH), 10, idx2val=None)
+    # #theta = read3D_sample_remap_space_efficient("{}/theta.txt".format(RESULTS_FOLDER), 10, idx2val=None)
+    # display_document_preprocessed(psi, phi, idx2tgt_sub)
+    # #display_document_preprocessed(theta, phi, idx2src_sub)
 
 
 

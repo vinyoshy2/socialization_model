@@ -95,6 +95,9 @@ void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, bool verbose) {
             std::cout << ms_double.count() << "ms\n";
             t1 = high_resolution_clock::now();
         }
+
+        // Store topic assignments
+        append3D("t_.txt", assign_t_);
     }
 }
 
@@ -315,10 +318,10 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
     int src_N_max = *max_element(src_N.begin(), src_N.end());
     int tgt_N_max = *max_element(tgt_N.begin(), tgt_N.end());
     // Resize assignment matrices
-    assign_c.resize(tgt_M, std::vector<std::vector<int>>(tgt_N_max, std::vector<int>(n_gibbs + 1, 0)));
-    assign_s.resize(tgt_M, std::vector<std::vector<int>>(tgt_N_max, std::vector<int>(n_gibbs + 1, 0)));
-    assign_t.resize(tgt_M, std::vector<std::vector<int>>(tgt_N_max, std::vector<int>(n_gibbs + 1, 0)));
-    assign_t_.resize(src_M, std::vector<std::vector<int>>(src_N_max, std::vector<int>(n_gibbs + 1, 0)));
+    assign_c.resize(tgt_M, std::vector<std::vector<int>>(tgt_N_max, 0));
+    assign_s.resize(tgt_M, std::vector<std::vector<int>>(tgt_N_max, 0));
+    assign_t.resize(tgt_M, std::vector<std::vector<int>>(tgt_N_max, 0));
+    assign_t_.resize(src_M, std::vector<std::vector<int>>(src_N_max, 0));
 
     // Reset count matrices
     for (auto& row : c_t_) fill(row.begin(), row.end(), 0);
@@ -345,7 +348,7 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
         for (int n = 0; n < src_N[d]; ++n) {
             int w_dn = text_network.src_blobs[d][n];
             int cur_topic = topic_dist(gen);
-            assign_t_[d][n][0] = cur_topic;
+            assign_t_[d][n] = cur_topic;
 
             // Increment counters
             wt[w_dn][cur_topic]++;
@@ -363,27 +366,27 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
 
             // Assign innovation flag (s)
             if (text_network.edges[d].empty()) {
-                assign_s[d][n][0] = 1;
+                assign_s[d][n] = 1;
                 forced_innovation_count[r]++;
             } else {
-                assign_s[d][n][0] = binary_dist(gen);
+                assign_s[d][n] = binary_dist(gen);
             }
 
             // Assign source subreddit (c)
-            if (assign_s[d][n][0] == 0) {
+            if (assign_s[d][n] == 0) {
                 std::uniform_int_distribution<int> edge_dist(0, text_network.edges[d].size() - 1);
-                assign_c[d][n][0] = text_network.edges[d][edge_dist(gen)];
+                assign_c[d][n] = text_network.edges[d][edge_dist(gen)];
             } else {
-                assign_c[d][n][0] = src_L;
+                assign_c[d][n] = src_L;
             }
 
             // Assign topic (t)
-            assign_t[d][n][0] = topic_dist(gen);
+            assign_t[d][n] = topic_dist(gen);
 
             // Increment counters
-            int cur_t = assign_t[d][n][0];
-            int cur_s = assign_s[d][n][0];
-            int cur_c = assign_c[d][n][0];
+            int cur_t = assign_t[d][n];
+            int cur_s = assign_s[d][n];
+            int cur_c = assign_c[d][n];
 
             dc[d][cur_c]++;
             ct[cur_c][cur_t]++;
@@ -398,10 +401,22 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
                 r1_sum[r]++;
             }
         }
+
     }
     for (int r = 0; r < tgt_L; r++) {
         std::cout << forced_innovation_count[r] << std::endl;
     }
+
+    std::cout << "Writing assign values" << std::endl;
+    init3D("c.txt", n_gibbs + 1, tgt_M, tgt_N);
+    init3D("s.txt", n_gibbs + 1, tgt_M, tgt_N);
+    init3D("t.txt", n_gibbs + 1, tgt_M, tgt_N);
+    init3D("t_.txt", n_gibbs + 1, src_M, src_N);
+
+    write3D("c.txt", assign_c);
+    write3D("s.txt", assign_s);
+    write3D("t.txt", assign_t);
+    write3D("t_.txt", assign_t_);
 }
 
 std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, int r, int t, bool print) {
@@ -468,19 +483,19 @@ std::vector<double> CollapsedGibbsSocLDA::conditional_prob_t_(int w_c_n, int c_)
 }
 
 
-void CollapsedGibbsSocLDA::update_cs(int d, int n, int r, int cs_iter, int t_iter) {
+void CollapsedGibbsSocLDA::update_cs(int d, int n, int r) {
     if (text_network.edges[d].empty()) {
-        assign_c[d][n][cs_iter + 1] = assign_c[d][n][cs_iter];
-        assign_s[d][n][cs_iter + 1] = assign_s[d][n][cs_iter];
+        // assign_c[d][n][cs_iter + 1] = assign_c[d][n][cs_iter];
+        // assign_s[d][n][cs_iter + 1] = assign_s[d][n][cs_iter];
         return;
     }
 
     int w_dn = text_network.tgt_blobs[d][n];
     const std::vector<int>& edges = text_network.edges[d];
 
-    int i_t = assign_t[d][n][t_iter];
-    int i_c = assign_c[d][n][cs_iter];
-    int i_s = assign_s[d][n][cs_iter];
+    int i_t = assign_t[d][n];
+    int i_c = assign_c[d][n];
+    int i_s = assign_s[d][n];
     /*if (d == 0 && n == 0) {
         std::cout << "Current c: " << i_c << " Current s: " << i_s << std::endl;
     }*/
@@ -521,16 +536,16 @@ void CollapsedGibbsSocLDA::update_cs(int d, int n, int r, int cs_iter, int t_ite
         r1_sum[r]++;
     }
 
-    assign_c[d][n][cs_iter + 1] = new_c;
-    assign_s[d][n][cs_iter + 1] = new_s;
+    assign_c[d][n] = new_c;
+    assign_s[d][n] = new_s;
 }
 
-void CollapsedGibbsSocLDA::update_t(int d, int n, int r, int cs_iter, int t_iter) {
+void CollapsedGibbsSocLDA::update_t(int d, int n, int r) {
     int w_dn = text_network.tgt_blobs[d][n];
 
-    int i_t = assign_t[d][n][t_iter];
-    int i_c = assign_c[d][n][cs_iter];
-    int i_s = assign_s[d][n][cs_iter];
+    int i_t = assign_t[d][n];
+    int i_c = assign_c[d][n];
+    int i_s = assign_s[d][n];
 
     // Decrement counters
     rts[r][i_t][i_s]--;
@@ -548,12 +563,12 @@ void CollapsedGibbsSocLDA::update_t(int d, int n, int r, int cs_iter, int t_iter
     wt[w_dn][i_tp1]++;
     t_sum[i_tp1]++;
 
-    assign_t[d][n][t_iter + 1] = i_tp1;
+    assign_t[d][n] = i_tp1;
 }
 
-void CollapsedGibbsSocLDA::update_t_(int c_, int n, int t_iter) {
+void CollapsedGibbsSocLDA::update_t_(int c_, int n) {
     int w_dn = text_network.src_blobs[c_][n];
-    int i_t_ = assign_t_[c_][n][t_iter];
+    int i_t_ = assign_t_[c_][n];
 
     // Decrement counters
     c_t_[c_][i_t_]--;
@@ -569,5 +584,5 @@ void CollapsedGibbsSocLDA::update_t_(int c_, int n, int t_iter) {
     wt[w_dn][i_tp1]++;
     t_sum[i_tp1]++;
 
-    assign_t_[c_][n][t_iter + 1] = i_tp1;
+    assign_t_[c_][n] = i_tp1;
 }

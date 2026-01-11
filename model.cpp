@@ -9,12 +9,12 @@
 
 
 // Constructor
-CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int n_topic, float alpha_sum_topics, float alpha_sum_vocab, float alpha_sum_edges) 
+CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int n_topic, float alpha_sum_topics, float alpha_sum_vocab, float alpha_sum_edges, const std::string& out_dir) 
     : text_network(text_network), V(text_network.vocab_size), k(n_topic),
         src_M(text_network.src_blobs.size()), tgt_M(text_network.tgt_blobs.size()),
         src_L(text_network.num_src_subreddits), tgt_L(text_network.num_tgt_subreddits),
         alpha_phi(alpha_sum_vocab / text_network.vocab_size), alpha_theta(alpha_sum_topics / n_topic), alpha_psi(alpha_sum_topics / n_topic), alpha_sum_edges(alpha_sum_edges),
-        lambda_theta(1.0), lambda_psi(1.0) {
+        lambda_theta(1.0), lambda_psi(1.0), output_dir(out_dir) {
     
     // prepare rng
     gen = std::mt19937(std::random_device{}());
@@ -53,7 +53,7 @@ CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int 
 }
 
 // Gibbs sampling function
-void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, bool verbose) {
+void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, int n_warmup, bool verbose) {
     // Initialize Gibbs sampler
     init_gibbs(n_gibbs);
 
@@ -74,7 +74,7 @@ void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, bool verbose) {
         // Update source subreddit documents
         for (int c_ = 0; c_ < src_M; ++c_) {
             for (int n = 0; n < src_N[c_]; ++n) {
-                update_t_(c_, n, iter);
+                update_t_(c_, n);
             }
         }
 
@@ -82,8 +82,8 @@ void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, bool verbose) {
         for (int d = 0; d < tgt_M; ++d) {
             for (int n = 0; n < tgt_N[d]; ++n) {
                 int r = text_network.tgt_subreddits[d];
-                update_t(d, n, r, iter, iter);
-                update_cs(d, n, r, iter, iter + 1);
+                update_t(d, n, r);
+                update_cs(d, n, r);
             }
         }
         
@@ -96,25 +96,34 @@ void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, bool verbose) {
             t1 = high_resolution_clock::now();
         }
 
-        // Store topic assignments
-        append3D("t_.txt", assign_t_);
+        if (iter >= n_warmup) {
+            //Recover parameters
+            std::vector<std::vector<double>> gamma = recover_gamma();
+            std::vector<std::vector<double>> psi = recover_psi();
+            std::vector<std::vector<double>> phi = recover_phi();
+            std::vector<std::vector<double>> theta = recover_theta();
+            std::vector<std::vector<double>> lambda = recover_lambda();
+
+            //Save to parameters to output file   
+            append2D(output_dir + "/gamma.txt", gamma);
+            append2D(output_dir + "/psi.txt", psi);
+            append2D(output_dir + "/phi.txt", phi);
+            append2D(output_dir + "/theta.txt", theta);
+            append2D(output_dir + "/lambda.txt", lambda);
+        }
     }
 }
 
-std::vector<std::vector<std::vector<double>>> CollapsedGibbsSocLDA::recover_gamma(int total_iter, int num_warmup) {
+std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_gamma() {
     
-    std::vector<std::vector<std::vector<double>>> gamma(
-        tgt_M, std::vector<std::vector<double>>(src_L, std::vector<double>(total_iter - num_warmup, 0.0)));
-    std::vector<std::vector<std::vector<double>>> tmp_counts(
-        tgt_M, std::vector<std::vector<double>>(src_L, std::vector<double>(total_iter - num_warmup, 0.0)));
+    std::vector<std::vector<double>> gamma(tgt_M, std::vector<double>(src_L, 0.0));
+    std::vector<std::vector<double>> tmp_counts(tgt_M, std::vector<double>(src_L, 0.0));
 
     // Collect counts from samples
     for (int d = 0; d < tgt_M; ++d) {
         for (int n = 0; n < tgt_N[d]; ++n) {
-            for (int iter = num_warmup; iter < total_iter; ++iter) {
-                if (assign_s[d][n][iter] == 0) {
-                    tmp_counts[d][assign_c[d][n][iter]][iter - num_warmup] += 1.0;
-                }
+            if (assign_s[d][n] == 0) {
+                tmp_counts[d][assign_c[d][n]] += 1.0;
             }
         }
     }
@@ -123,37 +132,31 @@ std::vector<std::vector<std::vector<double>>> CollapsedGibbsSocLDA::recover_gamm
         int num_edges = text_network.edges[d].size();
         for (size_t i = 0; i < num_edges; ++i) {
             int edge = text_network.edges[d][i];
-            double sum_val = 0.0;
-            for (int iter = num_warmup; iter < total_iter; ++iter) {
-                double numerator = tmp_counts[d][edge][iter - num_warmup] + (alpha_sum_edges/num_edges);
-                /*double denominator = 0.0;
-                for (int j = 0; j < src_L; ++j) {
-                    denominator += tmp_counts[d][j][iter - num_warmup];
-                }
-                denominator += num_edges * alpha_gamma;*/
-                gamma[d][edge][iter-num_warmup] = numerator;
-                /// denominator;
+            // double sum_val = 0.0;
+            double numerator = tmp_counts[d][edge] + (alpha_sum_edges/num_edges);
+            /*double denominator = 0.0;
+            for (int j = 0; j < src_L; ++j) {
+                denominator += tmp_counts[d][j][iter - num_warmup];
             }
+            denominator += num_edges * alpha_gamma;*/
+            gamma[d][edge] = numerator;
+            /// denominator;
         }
     }
     return gamma;
 }
 
-std::vector<std::vector<std::vector<double>>> CollapsedGibbsSocLDA::recover_psi(int total_iter, int num_warmup) {
+std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_psi() {
 
-    std::vector<std::vector<std::vector<double>>> psi(
-        tgt_L, std::vector<std::vector<double>>(k, std::vector<double>(total_iter - num_warmup, 0.0)));
-    std::vector<std::vector<std::vector<double>>> tmp_counts(
-        tgt_L, std::vector<std::vector<double>>(k, std::vector<double>(total_iter - num_warmup, 0.0)));
+    std::vector<std::vector<double>> psi(tgt_L, std::vector<double>(k, 0.0));
+    std::vector<std::vector<double>> tmp_counts(tgt_L, std::vector<double>(k, 0.0));
 
     // Collect counts from samples
     for (int d = 0; d < tgt_M; ++d) {
         int r = text_network.tgt_subreddits[d];
         for (int n = 0; n < tgt_N[d]; ++n) {
-            for (int iter = num_warmup; iter < total_iter; ++iter) {
-                if (assign_s[d][n][iter] == 1) {
-                    tmp_counts[r][assign_t[d][n][iter]][iter - num_warmup] += 1.0;
-                }
+            if (assign_s[d][n] == 1) {
+                tmp_counts[r][assign_t[d][n]] += 1.0;
             }
         }
     }
@@ -162,95 +165,79 @@ std::vector<std::vector<std::vector<double>>> CollapsedGibbsSocLDA::recover_psi(
     for (int d = 0; d < tgt_M; ++d) {
         int r = text_network.tgt_subreddits[d];
         for (int topic = 0; topic < k; ++topic) {
-            double sum_val = 0.0;
-            for (int iter = num_warmup; iter < total_iter; ++iter) {
-                double numerator = tmp_counts[r][topic][iter - num_warmup] + alpha_psi;
-                /*double denominator = 0.0;
-                for (int j = 0; j < k; ++j) {
-                    denominator += tmp_counts[d][j][iter - num_warmup];
-                }
-                denominator += k * alpha_psi;*/
-                psi[r][topic][iter - num_warmup]= numerator;
-                // / denominator;
+            // double sum_val = 0.0;
+            double numerator = tmp_counts[r][topic] + alpha_psi;
+            /*double denominator = 0.0;
+            for (int j = 0; j < k; ++j) {
+                denominator += tmp_counts[d][j][iter - num_warmup];
             }
+            denominator += k * alpha_psi;*/
+            psi[r][topic] = numerator;
+            // / denominator;
         }
     }
     return psi;
 }
 
-std::vector<std::vector<std::vector<double>>> CollapsedGibbsSocLDA::recover_phi(int total_iter, int num_warmup) {
+std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_phi() {
 
-    std::vector<std::vector<std::vector<double>>> phi(
-        k, std::vector<std::vector<double>>(V, std::vector<double>(total_iter - num_warmup, 0.0)));
-    std::vector<std::vector<std::vector<double>>> tmp_counts(
-        k, std::vector<std::vector<double>>(V, std::vector<double>(total_iter - num_warmup, 0.0)));
+    std::vector<std::vector<double>> phi(k, std::vector<double>(V, 0.0));
+    std::vector<std::vector<double>> tmp_counts(k, std::vector<double>(V, 0.0));
 
     // Collect counts from target network
     for (int d = 0; d < tgt_M; ++d) {
         for (int n = 0; n < tgt_N[d]; ++n) {
-            for (int iter = num_warmup; iter < total_iter; ++iter) {
-                int cur_topic = assign_t[d][n][iter];
-                int cur_word = text_network.tgt_blobs[d][n];
-                tmp_counts[cur_topic][cur_word][iter - num_warmup] += 1.0;
-            }
+            int cur_topic = assign_t[d][n];
+            int cur_word = text_network.tgt_blobs[d][n];
+            tmp_counts[cur_topic][cur_word] += 1.0;
         }
     }
 
     // Collect counts from source network
     for (int d = 0; d < src_M; ++d) {
         for (int n = 0; n < src_N[d]; ++n) {
-            for (int iter = num_warmup; iter < total_iter; ++iter) {
-                int cur_topic = assign_t_[d][n][iter];
-                int cur_word = text_network.src_blobs[d][n]; 
-                tmp_counts[cur_topic][cur_word][iter - num_warmup] += 1.0;
-            }
+            int cur_topic = assign_t_[d][n];
+            int cur_word = text_network.src_blobs[d][n]; 
+            tmp_counts[cur_topic][cur_word] += 1.0;
         }
     }
 
     // Compute phi
     for (int t = 0; t < k; ++t) {
         for (int w = 0; w < V; ++w) {
-            double sum_val = 0.0;
-            for (int iter = num_warmup; iter < total_iter; ++iter) {
-                double numerator = tmp_counts[t][w][iter - num_warmup] + alpha_phi;
-                /*double denominator = 0.0;
-                for (int j = 0; j < V; ++j) {
-                    denominator += tmp_counts[t][j][iter - num_warmup];
-                }
-                denominator += V * alpha_phi;*/
-                phi[t][w][iter-num_warmup] = numerator;
-                // / denominator;
+            // double sum_val = 0.0;
+            double numerator = tmp_counts[t][w] + alpha_phi;
+            /*double denominator = 0.0;
+            for (int j = 0; j < V; ++j) {
+                denominator += tmp_counts[t][j][iter - num_warmup];
             }
+            denominator += V * alpha_phi;*/
+            phi[t][w] = numerator;
+            // / denominator;
         }
     }
     return phi;
 }
 
-std::vector<std::vector<std::vector<double>>> CollapsedGibbsSocLDA::recover_theta(int total_iter, int num_warmup) {
-    std::vector<std::vector<std::vector<double>>> theta(
-        src_M, std::vector<std::vector<double>>(k, std::vector<double>(total_iter - num_warmup, 0.0)));
-    std::vector<std::vector<std::vector<double>>> tmp_counts(
-        src_M, std::vector<std::vector<double>>(k, std::vector<double>(total_iter - num_warmup, 0.0)));
+std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_theta() {
+    std::vector<std::vector<double>> theta(src_M, std::vector<double>(k, 0.0));
+    std::vector<std::vector<double>> tmp_counts(src_M, std::vector<double>(k, 0.0));
 
     // Collect counts from source network
     for (int d = 0; d < src_M; ++d) {
         for (int n = 0; n < src_N[d]; ++n) {
-            for (int iter = num_warmup; iter < total_iter; ++iter) {
-                int cur_topic = assign_t_[d][n][iter];
-                tmp_counts[d][cur_topic][iter - num_warmup] += 1.0;
-            }
+            int cur_topic = assign_t_[d][n];
+            tmp_counts[d][cur_topic] += 1.0;
         }
     }
 
     // Collect counts from target network, considering connections
     for (int d = 0; d < tgt_M; ++d) {
         for (int n = 0; n < tgt_N[d]; ++n) {
-            for (int iter = num_warmup; iter < total_iter; ++iter) {
-                int cur_topic = assign_t[d][n][iter];
-                int cur_c = assign_c[d][n][iter];
-                if (cur_c != src_L) {  // Ensure valid source index
-                    tmp_counts[cur_c][cur_topic][iter - num_warmup] += 1.0;
-                }
+            int cur_topic = assign_t[d][n];
+            int cur_c = assign_c[d][n];
+            if (cur_c != src_L) {  // Ensure valid source index
+                tmp_counts[cur_c][cur_topic] += 1.0;
             }
         }
     }
@@ -258,36 +245,30 @@ std::vector<std::vector<std::vector<double>>> CollapsedGibbsSocLDA::recover_thet
     // Compute theta
     for (int d = 0; d < src_M; ++d) {
         for (int t = 0; t < k; ++t) {
-            double sum_val = 0.0;
-            for (int iter = num_warmup; iter < total_iter; ++iter) {
-                double numerator = tmp_counts[d][t][iter - num_warmup] + alpha_theta;
-                /*double denominator = 0.0;
-                for (int j = 0; j < k; ++j) {
-                    denominator += tmp_counts[d][j][iter - num_warmup];
-                }
-                denominator += alpha_theta * k;*/
-                theta[d][t][iter-num_warmup] = numerator;
-                // / denominator;
+            // double sum_val = 0.0;
+            double numerator = tmp_counts[d][t] + alpha_theta;
+            /*double denominator = 0.0;
+            for (int j = 0; j < k; ++j) {
+                denominator += tmp_counts[d][j][iter - num_warmup];
             }
+            denominator += alpha_theta * k;*/
+            theta[d][t] = numerator;
+            // / denominator;
         }
     }
     return theta;
 }
 
-std::vector<std::vector<std::vector<double>>> CollapsedGibbsSocLDA::recover_lambda(int total_iter, int num_warmup) {
-    std::vector<std::vector<std::vector<double>>> lambdas(
-        tgt_L, std::vector<std::vector<double>>(2, std::vector<double>(total_iter - num_warmup, 0.0)));
-    std::vector<std::vector<std::vector<double>>> tmp_counts(
-        tgt_L, std::vector<std::vector<double>>(2, std::vector<double>(total_iter - num_warmup, 0.0)));
+std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_lambda() {
+    std::vector<std::vector<double>> lambdas(tgt_L, std::vector<double>(2, 0.0));
+    std::vector<std::vector<double>> tmp_counts(tgt_L, std::vector<double>(2, 0.0));
 
     // Collect counts from target network
     for (int d = 0; d < tgt_M; ++d) {
         int subreddit = text_network.tgt_subreddits[d];  // Get subreddit index
         for (int n = 0; n < tgt_N[d]; ++n) {
-            for (int iter = num_warmup; iter < total_iter; ++iter) {
-                int cur_s = assign_s[d][n][iter];
-                tmp_counts[subreddit][cur_s][iter - num_warmup] += 1.0;
-            }
+            int cur_s = assign_s[d][n];
+            tmp_counts[subreddit][cur_s] += 1.0;
         }
     }
 
@@ -295,18 +276,16 @@ std::vector<std::vector<std::vector<double>>> CollapsedGibbsSocLDA::recover_lamb
     for (int r = 0; r < tgt_L; ++r) {
         double sum_cite = 0;
         double sum_inno = 0;
-        for (int iter = num_warmup; iter < total_iter; ++iter) {
-            /*double denom = 0.0;
-            for (int j = 0; j < 2; ++j) {
-                denom += tmp_counts[r][j][iter - num_warmup];
-            }
-            denom -= forced_innovation_count[r];
-            denom += lambda_theta + lambda_psi;*/
-            lambdas[r][0][iter - num_warmup] += (tmp_counts[r][0][iter - num_warmup] + lambda_theta);
-            // / denom;
-            lambdas[r][1][iter - num_warmup] += (tmp_counts[r][1][iter - num_warmup] - forced_innovation_count[r] + lambda_psi);
-            // / denom;
+        /*double denom = 0.0;
+        for (int j = 0; j < 2; ++j) {
+            denom += tmp_counts[r][j][iter - num_warmup];
         }
+        denom -= forced_innovation_count[r];
+        denom += lambda_theta + lambda_psi;*/
+        lambdas[r][0] += (tmp_counts[r][0] + lambda_theta);
+        // / denom;
+        lambdas[r][1] += (tmp_counts[r][1] - forced_innovation_count[r] + lambda_psi);
+        // / denom;
     }
     return lambdas;
 }
@@ -318,10 +297,10 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
     int src_N_max = *max_element(src_N.begin(), src_N.end());
     int tgt_N_max = *max_element(tgt_N.begin(), tgt_N.end());
     // Resize assignment matrices
-    assign_c.resize(tgt_M, std::vector<std::vector<int>>(tgt_N_max, 0));
-    assign_s.resize(tgt_M, std::vector<std::vector<int>>(tgt_N_max, 0));
-    assign_t.resize(tgt_M, std::vector<std::vector<int>>(tgt_N_max, 0));
-    assign_t_.resize(src_M, std::vector<std::vector<int>>(src_N_max, 0));
+    assign_c.resize(tgt_M, std::vector<int>(tgt_N_max, 0));
+    assign_s.resize(tgt_M, std::vector<int>(tgt_N_max, 0));
+    assign_t.resize(tgt_M, std::vector<int>(tgt_N_max, 0));
+    assign_t_.resize(src_M, std::vector<int>(src_N_max, 0));
 
     // Reset count matrices
     for (auto& row : c_t_) fill(row.begin(), row.end(), 0);
@@ -407,16 +386,12 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
         std::cout << forced_innovation_count[r] << std::endl;
     }
 
-    std::cout << "Writing assign values" << std::endl;
-    init3D("c.txt", n_gibbs + 1, tgt_M, tgt_N);
-    init3D("s.txt", n_gibbs + 1, tgt_M, tgt_N);
-    init3D("t.txt", n_gibbs + 1, tgt_M, tgt_N);
-    init3D("t_.txt", n_gibbs + 1, src_M, src_N);
-
-    write3D("c.txt", assign_c);
-    write3D("s.txt", assign_s);
-    write3D("t.txt", assign_t);
-    write3D("t_.txt", assign_t_);
+    std::cout << "Writing params" << std::endl;
+    init3D(output_dir + "/gamma.txt", n_gibbs + 1, tgt_M, tgt_N);
+    init3D(output_dir + "/psi.txt", n_gibbs + 1, tgt_M, tgt_N);
+    init3D(output_dir + "/phi.txt", n_gibbs + 1, tgt_M, tgt_N);
+    init3D(output_dir + "/theta.txt", n_gibbs + 1, src_M, src_N);
+    init3D(output_dir + "/lambda.txt", n_gibbs + 1, src_M, src_N);
 }
 
 std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, int r, int t, bool print) {

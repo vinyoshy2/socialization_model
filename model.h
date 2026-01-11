@@ -28,6 +28,9 @@ public:
     double lambda_theta;
     double lambda_psi;
 
+    // Output dir
+    std::string output_dir;
+
     // Count matrices
     std::vector<std::vector<int>> dc;
     std::vector<std::vector<int>> ct;
@@ -44,10 +47,10 @@ public:
     std::vector<int> t_sum;
 
     // Gibbs sampler assignment matrices
-    std::vector<std::vector<std::vector<int>>> assign_c;
-    std::vector<std::vector<std::vector<int>>> assign_s;
-    std::vector<std::vector<std::vector<int>>> assign_t;
-    std::vector<std::vector<std::vector<int>>> assign_t_;
+    std::vector<std::vector<int>> assign_c;
+    std::vector<std::vector<int>> assign_s;
+    std::vector<std::vector<int>> assign_t;
+    std::vector<std::vector<int>> assign_t_;
 
 
     // Random number generator
@@ -55,17 +58,17 @@ public:
     std::mt19937 gen;
 
     // Constructor
-    CollapsedGibbsSocLDA(const TextNetwork& text_network, int n_topic, float alpha_sum_topics, float alpha_sum_vocab, float alpha_sum_edges); 
+    CollapsedGibbsSocLDA(const TextNetwork& text_network, int n_topic, float alpha_sum_topics, float alpha_sum_vocab, float alpha_sum_edges, const std::string& out_dir); 
 
     // Gibbs sampling function
-    void run_gibbs(int n_gibbs, bool verbose);
+    void run_gibbs(int n_gibbs, int n_warmup, bool verbose);
     
     // Functions for recovering parameters
-    std::vector<std::vector<std::vector<double>>> recover_gamma(int total_iter, int num_warmup);
-    std::vector<std::vector<std::vector<double>>> recover_psi(int total_iter, int num_warmup);
-    std::vector<std::vector<std::vector<double>>> recover_phi(int total_iter, int num_warmup);
-    std::vector<std::vector<std::vector<double>>> recover_theta(int total_iter, int num_warmup);
-    std::vector<std::vector<std::vector<double>>> recover_lambda(int total_iter, int num_warmup);
+    std::vector<std::vector<double>> recover_gamma();
+    std::vector<std::vector<double>> recover_psi();
+    std::vector<std::vector<double>> recover_phi();
+    std::vector<std::vector<double>> recover_theta();
+    std::vector<std::vector<double>> recover_lambda();
 
 private:
 
@@ -77,11 +80,11 @@ private:
 
     std::vector<double> conditional_prob_t_(int w_c_n, int c_);
 
-    void update_cs(int d, int n, int r, int cs_iter, int t_iter);
+    void update_cs(int d, int n, int r);
 
-    void update_t(int d, int n, int r, int cs_iter, int t_iter);
+    void update_t(int d, int n, int r);
 
-    void update_t_(int c_, int n, int t_iter);
+    void update_t_(int c_, int n);
 };
 
 #endif

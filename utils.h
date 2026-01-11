@@ -13,4 +13,7 @@ void write1D(std::string filename, std::vector<double> v);
 void write2D(std::string filename, std::vector<std::vector<double>> v);
 void write3D(std::string filename, std::vector<std::vector<std::vector<double>>> v);
 
+void init3D(std::string filename, int dim1, int dim2, std::vector<int> dim3);
+void append2D(std::string filename, std::vector<std::vector<double>> v);
+
 #endif

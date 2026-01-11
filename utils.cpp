@@ -146,7 +146,7 @@ void write3D(std::string filename, std::vector<std::vector<std::vector<double>>>
     outputFile.close();
 }
 
-void init3D(std::string filename, int dim1, int dim2, int dim3) {
+void init3D(std::string filename, int dim1, int dim2, std::vector<int> dim3) {
     std::ofstream outputFile;
     outputFile.open(filename);
     
@@ -160,22 +160,22 @@ void init3D(std::string filename, int dim1, int dim2, int dim3) {
 
     for (int i = 0; i < dim1; i++) {
         for (int j = 0; j < dim2; j++) {
-            outputFile << dim3 << std::endl;
+            outputFile << dim3[j] << std::endl;
         }
     }
 
     outputFile.close();
 }
 
-void append3D(std::string filename, std::vector<std::vector<double>> v) {
+void append2D(std::string filename, std::vector<std::vector<double>> v) {
     std::ofstream outputFile;
     outputFile.open(filename, std::ios::app);
 
     for (int i = 0; i < v.size(); i++) {
         for (int j = 0; j < v[i].size(); j++) {
-            outputFile << v[i][j] << " "; //Row elements separated by spaces
+            outputFile << v[i][j] << " ";
         }
-        outputFile << std::endl; //Rows separated by newlines
+        outputFile << std::endl;
     }
-    outputFile << std::endl << std::endl; //Rows separated by newlines
+    outputFile << std::endl << std::endl;
 }

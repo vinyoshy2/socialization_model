@@ -140,25 +140,13 @@ int main(int argc, char** argv) {
         std::cout << "Made Text network" << std::endl;
 
         //Initialize model
-        CollapsedGibbsSocLDA model(text_network, opt.topics, opt.alpha_sum_topics, opt.alpha_sum_vocab, opt.alpha_sum_edges);
+        CollapsedGibbsSocLDA model(text_network, opt.topics, opt.alpha_sum_topics, opt.alpha_sum_vocab, opt.alpha_sum_edges, output_dir);
         std::cout << "Initalized" << std::endl;
 
         //Run Gibbs sampler
-        model.run_gibbs(iterations, true);
+        model.run_gibbs(iterations, warmup, true);
 
-        //Recover parameters
-        std::vector<std::vector<std::vector<double>>> gamma = model.recover_gamma(iterations, warmup);
-        std::vector<std::vector<std::vector<double>>> psi = model.recover_psi(iterations, warmup);
-        std::vector<std::vector<std::vector<double>>> phi = model.recover_phi(iterations, warmup);
-        std::vector<std::vector<std::vector<double>>> theta = model.recover_theta(iterations, warmup);
-        std::vector<std::vector<std::vector<double>>> lambda = model.recover_lambda(iterations, warmup);
-
-        //Save to parameters to output file   
-        write3D(output_dir + "/gamma.txt", gamma);
-        write3D(output_dir + "/psi.txt", psi);
-        write3D(output_dir + "/phi.txt", phi);
-        write3D(output_dir + "/theta.txt", theta);
-        write3D(output_dir + "/lambda.txt", lambda);
+        
 
     } catch (const std::exception& e) {
         std::cerr << e.what() << "\n";

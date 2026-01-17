@@ -293,14 +293,20 @@ std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_lambda() {
 // Initialize the Gibbs sampler
 void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
     
-    // Max lengths
-    int src_N_max = *max_element(src_N.begin(), src_N.end());
-    int tgt_N_max = *max_element(tgt_N.begin(), tgt_N.end());
     // Resize assignment matrices
-    assign_c.resize(tgt_M, std::vector<int>(tgt_N_max, 0));
-    assign_s.resize(tgt_M, std::vector<int>(tgt_N_max, 0));
-    assign_t.resize(tgt_M, std::vector<int>(tgt_N_max, 0));
-    assign_t_.resize(src_M, std::vector<int>(src_N_max, 0));
+    assign_c.resize(tgt_M);
+    assign_s.resize(tgt_M);
+    assign_t.resize(tgt_M);
+    for (int d = 0; d < tgt_M; ++d) {
+        assign_c[d] = std::vector<int>(tgt_N[d], 0);
+        assign_s[d] = std::vector<int>(tgt_N[d], 0);
+        assign_t[d] = std::vector<int>(tgt_N[d], 0);
+    }
+
+    assign_t_.resize(src_M);
+    for (int d = 0; d < src_M; ++d) {
+        assign_t_[d] = std::vector<int>(src_N[d], 0);
+    }
 
     // Reset count matrices
     for (auto& row : c_t_) fill(row.begin(), row.end(), 0);

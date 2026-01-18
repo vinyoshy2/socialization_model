@@ -15,18 +15,131 @@ RESULTS_FOLDER = "{}/{}/".format(RESULTS_FOLDER, MONTH)
 INPUTS_FOLDER = "{}/{}/".format(INPUTS_FOLDER, MONTH)
 SUBREDDIT_NAMES = {0: "coronavirus", 1: "china_flu"}
 
+
+#don't use this function long term, i think theres some incorrect approximinations (mean of means type stuff)
+def analyze_assign_c(file_loc, topk, comments_per_sub, vector_shape, processing_func, lookup):
+    output = []
+    with open(file_loc) as f:
+        # Read first dimension (number of subreddits)
+        dim1 = int(f.readline()) # = 2 (coronavirus, china_flu)
+        # Read second dimension (components per subreddit; probability pairs)
+        dim2s = []
+        for i in range(0, dim1):
+            dim2s.append(int(f.readline())) # = [2, 2]
+        # Read third dimension  (iterations per component; MCMC samples)
+        dim3s = []
+        for i in range(0, dim1):
+            dim3s.append([])
+            for j in range(0, dim2s[i]):
+                dim3s[i].append(int(f.readline())) # = [[1500, 1500], [1500, 1500]]
+    
+        outer_dim = 0
+        inner_dim = 0
+        # Populate output 3D list
+        pos = 0
+        output = []
+        cur_row_avg = np.zeros(vector_shape)
+        while outer_dim < dim1:
+            cur_row = []
+            while inner_dim < dim2s[outer_dim]:
+                cur_line = f.readline()
+                if cur_line.strip() != "":
+                    nums = [int(val) for val in cur_line.split()]
+                    if len(nums) <= 0:
+                        print("~~~~{}~~~~".format(cur_line))
+                    cur_row.append(nums)
+                    inner_dim += 1
+            cur_row_avg += processing_func(cur_row, comments_per_sub, vector_shape, outer_dim, lookup)
+            if (outer_dim % comments_per_sub) == (comments_per_sub - 1):
+                remapped_row = cur_row_avg
+                output.append(remapped_row)
+                cur_row_avg = np.zeros(vector_shape)
+            outer_dim += 1
+            inner_dim = 0
+    return output
+
+def cited_this_iteration(iter_vec, comments_per_sub, vector_shape, doc_number, lookup=None):
+    filtered = []
+    for row in iter_vec:
+        if not all([val == 0 for val in row]):
+            filtered.append(row)
+    vals, counts = np.unique(filtered, return_counts=True)
+    output = np.zeros(vector_shape)
+    for i, elem in enumerate(vals):
+        output[elem] = counts[i]
+    return output
+
+def words_by_source(iter_vec, comments_per_sub, vector_shape, doc_number, lookup):
+    filtered = []
+    for row in iter_vec:
+        if not all([val == 0 for val in row]):
+            filtered.append(row)
+    output = np.zeros(vector_shape)
+    iter_vec = np.array(filtered)
+    if len(iter_vec.shape) > 1:
+        for iter_num in range(iter_vec.shape[1]):
+            for pos in range(iter_vec.shape[0]):
+                cited_sub = iter_vec[pos][iter_num]
+                word = int(lookup[doc_number][pos])
+                output[cited_sub][word] += 1
+    return output
+
+#don't use this function long term, i think theres some incorrect approximinations (mean of means type stuff)
+def read3Dgamma_sample_remap_space_efficient(file_loc, topk, comments_per_sub, idx2val=None):
+    output = []
+    with open(file_loc) as f:
+        # Read first dimension (number of subreddits)
+        dim1 = int(f.readline()) # = 2 (coronavirus, china_flu)
+        # Read second dimension (components per subreddit; probability pairs)
+        dim2s = []
+        for i in range(0, dim1):
+            dim2s.append(int(f.readline())) # = [2, 2]
+        # Read third dimension  (iterations per component; MCMC samples)
+        dim3s = []
+        for i in range(0, dim1):
+            dim3s.append([])
+            for j in range(0, dim2s[i]):
+                dim3s[i].append(int(f.readline())) # = [[1500, 1500], [1500, 1500]]
+    
+        outer_dim = 0
+        inner_dim = 0
+        # Populate output 3D list
+        pos = 0
+        output = []
+        cur_row_avg = np.zeros(dim2s[0])
+        while outer_dim < dim1:
+            cur_row = []
+            while inner_dim < dim2s[outer_dim]:
+                cur_line = f.readline()
+                if cur_line.strip() != "":
+                    nums = [float(val) for val in cur_line.split()]
+                    if len(nums) <= 0:
+                        print("~~~~{}~~~~".format(cur_line))
+                    avg_num = np.mean(nums)
+                    cur_row.append(avg_num)
+                    inner_dim += 1
+            row_norm = sum(cur_row)
+            if row_norm != 0:
+                cur_row = [elem / row_norm for elem in cur_row]
+            if (outer_dim % comments_per_sub) != (comments_per_sub - 1):
+                cur_row_avg += np.array(cur_row)
+            else:
+                remapped_row = remap_vector(cur_row_avg / comments_per_sub, topk, idx2val)
+                output.append(remapped_row)
+                cur_row_avg = np.zeros(dim2s[0])
+            outer_dim += 1
+            inner_dim = 0
+    return output
 #don't use this function long term, i think theres some incorrect approximinations (mean of means type stuff)
 def read3D_sample_remap_space_efficient(file_loc, topk, idx2val=None):
     output = []
     with open(file_loc) as f:
         # Read first dimension (number of subreddits)
         dim1 = int(f.readline()) # = 2 (coronavirus, china_flu)
-
         # Read second dimension (components per subreddit; probability pairs)
         dim2s = []
         for i in range(0, dim1):
             dim2s.append(int(f.readline())) # = [2, 2]
-
         # Read third dimension  (iterations per component; MCMC samples)
         dim3s = []
         for i in range(0, dim1):
@@ -44,18 +157,45 @@ def read3D_sample_remap_space_efficient(file_loc, topk, idx2val=None):
             while inner_dim < dim2s[outer_dim]:
                 cur_line = f.readline()
                 if cur_line.strip() != "":
-                    nums = [int(val) for val in cur_line.split()]
+                    nums = [float(val) for val in cur_line.split()]
                     if len(nums) <= 0:
                         print("~~~~{}~~~~".format(cur_line))
                     avg_num = np.mean(nums)
                     cur_row.append(avg_num)
                     inner_dim += 1
             row_norm = sum(cur_row)
-            cur_row = [elem / row_norm for elem in cur_row]
+            if row_norm != 0:
+                cur_row = [elem / row_norm for elem in cur_row]
             remapped_row = remap_vector(cur_row, topk, idx2val)
             output.append(remapped_row)
             outer_dim += 1
             inner_dim = 0
+    return output
+
+def read2D(file_loc):
+    output = []
+    with open(file_loc) as f:
+        # Read first dimension (number of subreddits)
+        dim1 = int(f.readline()) # = 2 (coronavirus, china_flu)
+
+        # Read second dimension (components per subreddit; probability pairs)
+        dim2s = []
+        for i in range(0, dim1):
+            dim2s.append(int(f.readline())) # = [2, 2]
+
+        # Read the rest of file
+        body = f.read()
+        # Split into individual numbers
+        body = body.split()
+
+        # Populate output 3D list
+        pos = 0
+        for i in range(dim1): # For each subreddit
+            output.append([])
+            for j in range(dim2s[i]): # For each probability pair
+                output[i].append(float(body[pos]))
+                pos += 1
+
     return output
 
 def read3D(file_loc):
@@ -267,11 +407,6 @@ if __name__ == "__main__":
 #    all_records.append((MONTH, inferred_lambdas))
 #    graph_lambda(all_records)
 
-    ### GAMMA ###
-    #edges = readEdges(f"../inputs/1/edges.txt")
-    #gamma_pseudocounts = read3D("../results/1/gamma.txt")
-    #inferred_gammas = produce_samples_dirichlet(gamma_pseudocounts, edges)
-    # compare_gamma(inferred_gammas)
     
     ### TOPIC VECTORS  ###
     
@@ -280,18 +415,47 @@ if __name__ == "__main__":
     idx2tgt_pair = readJSON("{}/idx2tgt_pair.json".format(INPUTS_FOLDER))
     idx2tgt_sub = readJSON("{}/idx2tgt_sub.json".format(INPUTS_FOLDER))
     idx2src_sub = readJSON("{}/idx2src_sub.json".format(INPUTS_FOLDER))
-    print("read in jsons")
+    idx2src_sub[str(len(idx2src_sub))] = "self"
+    tgt_blobs = read2D("{}/tgt_blobs.txt".format(INPUTS_FOLDER))
+    
+    #output = analyze_assign_c("{}/assign_c.txt".format(RESULTS_FOLDER), 10, 100, len(idx2src_sub), cited_this_iteration, None)
+    #remapped = [[],[]]
+    #remapped[0] = remap_vector(output[0], 20, idx2src_sub)
+#    remapped[1] = remap_vector(output[1], 20, idx2src_sub)
+#   display_topics(remapped)
+ #   print("dim1", output)
+  #  print("dim1", len(output))
+   # print("dim2", len(output[0]))
+    ### GAMMA ###
+ #   edges = readEdges("{}/edges.txt".format(INPUTS_FOLDER))
+  #  gammas = read3Dgamma_sample_remap_space_efficient("{}/gamma.txt".format(RESULTS_FOLDER), 10, 100, idx2val=idx2src_sub)
+   # display_topics(gammas)
+    #inferred_gammas = produce_samples_dirichlet(gamma_pseudocounts, edges)
+    # compare_gamma(inferred_gammas)
 
     #read in and compute posteriors
-    phi = read3D_sample_remap_space_efficient("{}/phi.txt".format(RESULTS_FOLDER), 40, idx2val=idx2vocab)
-    #display_topics(phi)
-    psi = read3D_sample_remap_space_efficient("{}/psi.txt".format(RESULTS_FOLDER), 10, idx2val=None)
+   # phi = read3D_sample_remap_space_efficient("{}/phi.txt".format(RESULTS_FOLDER), 40, idx2val=idx2vocab)
+   # display_topics(phi)
+    #psi = read3D_sample_remap_space_efficient("{}/psi.txt".format(RESULTS_FOLDER), 10, idx2val=None)
     #theta = read3D_sample_remap_space_efficient("{}/theta.txt".format(RESULTS_FOLDER), 10, idx2val=None)
-    display_document_preprocessed(psi, phi, idx2tgt_sub)
+    #display_document_preprocessed(psi, phi, idx2tgt_sub)
     #display_document_preprocessed(theta, phi, idx2src_sub)
 
 
+    output = analyze_assign_c("{}/assign_c.txt".format(RESULTS_FOLDER), 10, 100, (len(idx2src_sub), len(idx2vocab)), words_by_source, tgt_blobs)
+    for i, row in enumerate(output[0]):
+        if sum(row) > 1000:
+            print("========== {} =========".format(idx2src_sub[str(i)]))
+            remapped = remap_vector(row, 20, idx2vocab)
+            display_topic(remapped)
+    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+    for i, row in enumerate(output[1]):
+        if sum(row) > 1000:
+            print("========== {} =========".format(idx2src_sub[str(i)]))
+            remapped = remap_vector(row, 20, idx2vocab)
+            display_topic(remapped)
+            
 
 
     
-#
+

@@ -145,3 +145,33 @@ void write3D(std::string filename, std::vector<std::vector<std::vector<double>>>
     }
     outputFile.close();
 }
+
+void write3D(std::string filename, std::vector<std::vector<std::vector<int>>> v) {
+    std::ofstream outputFile;
+    outputFile.open(filename);
+    
+    //2D vector files begin with number of rows
+    outputFile << v.size() << std::endl;
+    
+    //2D vectors files then contain number of elements in each row
+    for (int i = 0; i < v.size(); i++) {
+        outputFile << v[i].size() << std::endl;
+    }
+
+    for (int i = 0; i < v.size(); i++) {
+        for (int j = 0; j < v[i].size(); j++) {
+            outputFile << v[i][j].size() << std::endl;
+        }
+    }
+
+    for (int i = 0; i < v.size(); i++) {
+        for (int j = 0; j < v[i].size(); j++) {
+            for (int k = 0; k < v[i][j].size(); k++) {
+                outputFile << v[i][j][k] << " "; //Row elements separated by spaces
+            }
+            outputFile << std::endl; //Rows separated by newlines
+        }
+        outputFile << std::endl << std::endl; //Rows separated by newlines
+    }
+    outputFile.close();
+}

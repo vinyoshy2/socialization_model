@@ -159,6 +159,7 @@ int main(int argc, char** argv) {
         write3D(output_dir + "/phi.txt", phi);
         write3D(output_dir + "/theta.txt", theta);
         write3D(output_dir + "/lambda.txt", lambda);
+        write3D(output_dir + "/assign_c.txt", model.assign_c);
 
     } catch (const std::exception& e) {
         std::cerr << e.what() << "\n";

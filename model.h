@@ -72,7 +72,7 @@ public:
 
 private:
 
-    void init_gibbs(int n_gibbs);
+    void init_gibbs(int n_gibbs, int n_warmup);
 
     std::vector<double> conditional_prob_cs(int w_dn, int d, int r, int t, bool print);
 

@@ -55,7 +55,7 @@ CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int 
 // Gibbs sampling function
 void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, int n_warmup, bool verbose) {
     // Initialize Gibbs sampler
-    init_gibbs(n_gibbs);
+    init_gibbs(n_gibbs, n_warmup);
 
     if (verbose) {
         std::cout << "\n========== START SAMPLER ==========" << std::endl;
@@ -291,7 +291,7 @@ std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_lambda() {
 }
 
 // Initialize the Gibbs sampler
-void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
+void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs, int n_warmup) {
     
     // Resize assignment matrices
     assign_c.resize(tgt_M);
@@ -393,11 +393,11 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs) {
     }
 
     std::cout << "Writing params" << std::endl;
-    init3D(output_dir + "/gamma.txt", n_gibbs + 1, tgt_M, tgt_N);
-    init3D(output_dir + "/psi.txt", n_gibbs + 1, tgt_M, tgt_N);
-    init3D(output_dir + "/phi.txt", n_gibbs + 1, tgt_M, tgt_N);
-    init3D(output_dir + "/theta.txt", n_gibbs + 1, src_M, src_N);
-    init3D(output_dir + "/lambda.txt", n_gibbs + 1, src_M, src_N);
+    init3D(output_dir + "/gamma.txt", n_gibbs - n_warmup, tgt_M, std::vector<int>(tgt_M, src_L));
+    init3D(output_dir + "/psi.txt", n_gibbs - n_warmup, tgt_L, std::vector<int>(tgt_L, k));
+    init3D(output_dir + "/phi.txt", n_gibbs - n_warmup, k, std::vector<int>(k, V));
+    init3D(output_dir + "/theta.txt", n_gibbs - n_warmup, src_L, std::vector<int>(src_L, k));
+    init3D(output_dir + "/lambda.txt", n_gibbs - n_warmup, tgt_L, std::vector<int>(tgt_L, 2));
 }
 
 std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, int r, int t, bool print) {

@@ -19,7 +19,6 @@ def read3D(file_loc):
             dim3s.append([])
             for j in range(0, dim2s[i]):
                 dim3s[i].append(int(f.readline()))
-            
         body = f.read()
         body = body.split()
         pos = 0
@@ -28,6 +27,7 @@ def read3D(file_loc):
             for j in range(dim2s[i]):
                 output[i].append([])
                 for k in range(dim3s[i][j]):
+                    print(i,j,k)
                     output[i][j].append(float(body[pos]))
                     pos += 1
     return np.array(output)
@@ -39,15 +39,15 @@ def read_params(loc):
 
 def produce_samples_dirichlet(iter_results, non_zero_list = None):
     
-    num_vectors = iter_results.shape[0]
-    vector_size = iter_results.shape[1]
-    num_iters = iter_results.shape[2]
+    num_iters = iter_results.shape[0]
+    num_vectors = iter_results.shape[1]
+    vector_size = iter_results.shape[2]
     
-    posterior = np.zeros((num_vectors, vector_size, num_iters))
+    posterior = np.zeros((num_iters, num_vectors, vector_size))
     
     for cur_iter in range(0, num_iters):
         for cur_vector in range(0, num_vectors):
-            orig_params = iter_results[cur_vector,:, cur_iter]
+            orig_params = iter_results[cur_iter, cur_vector,:]
             if non_zero_list != None:
                 params = [orig_params[i] for i in non_zero_list[cur_vector]]
             else:
@@ -59,36 +59,38 @@ def produce_samples_dirichlet(iter_results, non_zero_list = None):
                 for val, index in zip(sampled_vector, non_zero_list[cur_vector]):
                     reformed_sampled[index] = val
                 sampled_vector = reformed_sampled
-            posterior[cur_vector,:,cur_iter] = sampled_vector
+            posterior[cur_iter, cur_vector,:] = sampled_vector
     return posterior
 
 def produce_samples_beta(iter_results):
     
-    num_vectors = iter_results.shape[0]
-    vector_size = iter_results.shape[1]
-    num_iters = iter_results.shape[2]
+    num_iters = iter_results.shape[0]
+    num_vectors = iter_results.shape[1]
+    vector_size = iter_results.shape[2]
+    print("num_iters", num_iters)
+    print("num_vectors", num_vectors)
+    print("vector_size", vector_size)
     
-    posterior = np.zeros((num_vectors, vector_size, num_iters))
+    posterior = np.zeros((num_iters, num_vectors, vector_size))
     for cur_iter in range(0, num_iters):
         for cur_vector in range(0, num_vectors):
-            params = iter_results[cur_vector,:, cur_iter]
+            params = iter_results[cur_iter, cur_vector,:]
             sampled_val = np.random.beta(a=params[1]+1, b=params[0]+1)
-            posterior[cur_vector,0,cur_iter] = 1-sampled_val
-            posterior[cur_vector,1,cur_iter] = sampled_val
+            posterior[cur_iter, cur_vector,0] = 1-sampled_val
+            posterior[cur_iter, cur_vector,1] = sampled_val
     return posterior
 
 def compare_spec(ground_truth, iter_results, name):
-    num_vectors = iter_results.shape[0]
-    vector_size = iter_results.shape[1]
-    num_iters = iter_results.shape[2]
+    num_iters = iter_results.shape[0]
+    num_vectors = iter_results.shape[1]
+    vector_size = iter_results.shape[2]
+    print("ground_truth: ", ground_truth)
+    print("iter_results first_dim: ", iter_results[:, 0, 0])
+    print("iter_results second_dim: ", iter_results[10, :, :])
     if num_vectors > 10:
         sub_sample_vectors = random.sample(list(range(num_vectors)), k=10)
     else:
         sub_sample_vectors = list(range(num_vectors))
-    print("num_vectors", num_vectors)
-    print("vector_sizes", vector_size)
-    print("num_iters", num_iters)
-    print("sub_sample_inds", sub_sample_vectors)
     fig, axes = plt.subplots(nrows=len(sub_sample_vectors), ncols=1, figsize=(8, 20))
     for i, vec in enumerate(sub_sample_vectors):
         records = []
@@ -100,7 +102,7 @@ def compare_spec(ground_truth, iter_results, name):
                 records.append({"Index": vec_ind,
                                             "Iter": iteration,
                                             "Type": "Inferred",
-                                            "Probability": iter_results[vec][vec_ind][iteration]})
+                                            "Probability": iter_results[iteration][vec][vec_ind]})
         cur_ax = axes[i]
         g = sns.pointplot(ax=cur_ax, data=pd.DataFrame.from_records(records),
                       x="Index", y="Probability", hue="Type", errorbar=("pi", 95), linestyles="")
@@ -128,7 +130,7 @@ params = read_params("{}/params.json".format(params_folder))
 lambda_pseudocounts = read3D("{}/lambda.txt".format(model_output_folder))
 inferred_lambdas = produce_samples_beta(lambda_pseudocounts)
 #the ground truth lambdas also need to be made into a 2D array
-gt_lambdas = np.zeros((inferred_lambdas.shape[0], inferred_lambdas.shape[1]))
+gt_lambdas = np.zeros((inferred_lambdas.shape[1], inferred_lambdas.shape[2]))
 for i in range(0, len(params["coin_flip_probs"])):
     gt_lambdas[i][0] = 1 - params["coin_flip_probs"][i]
     gt_lambdas[i][1] = params["coin_flip_probs"][i]

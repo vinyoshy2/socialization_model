@@ -10,7 +10,7 @@ PARAM_GRID = {
     "warmup_steps": [500],
     "alpha_sum_topics": [0.01, 0.1, 1.0],
     "alpha_sum_vocab": [0.01, 0.1, 1.0],
-    "alpha_sum_edges": [0.01, 0.1, 1.0],
+    "alpha_edges": [0.01, 0.1, 1.0],
 }
 
 N_RANDOM_SAMPLES = int(sys.argv[1])
@@ -30,7 +30,7 @@ def main():
 
         for month in range(START_MONTH, END_MONTH + 1):
             input_dir = f"data/{month}"
-            result_dir = f"data/results/priors/k{param_dict['topics']}_i{param_dict['iterations']}_w{param_dict['warmup_steps']}_aT{param_dict['alpha_sum_topics']}_aV{param_dict['alpha_sum_vocab']}_aE{param_dict['alpha_sum_edges']}/{month}"
+            result_dir = f"data/results/priors/k{param_dict['topics']}_i{param_dict['iterations']}_w{param_dict['warmup_steps']}_aT{param_dict['alpha_sum_topics']}_aV{param_dict['alpha_sum_vocab']}_aE{param_dict['alpha_edges']}/{month}"
             Path(result_dir).mkdir(parents=True, exist_ok=True)
 
             cmd = [
@@ -42,7 +42,7 @@ def main():
                 "--warmup", str(param_dict['warmup_steps']),
                 "--alpha-topics", str(param_dict['alpha_sum_topics']),
                 "--alpha-vocab", str(param_dict['alpha_sum_vocab']),
-                "--alpha-edges", str(param_dict['alpha_sum_edges']),
+                "--alpha-edges", str(param_dict['alpha_edges']),
             ]
             
             print(f"\tRunning month {month}...")

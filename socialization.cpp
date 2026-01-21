@@ -15,7 +15,7 @@ struct Options {
     int warmup_steps = 200;
     float alpha_sum_topics = 1.0f;
     float alpha_sum_vocab = 1.0f;
-    float alpha_sum_edges = 1.0f;
+    float alpha_edges = 1.0f;
 };
 
 Options parseArgs(int argc, char** argv) {
@@ -68,7 +68,7 @@ Options parseArgs(int argc, char** argv) {
             opt.alpha_sum_topics = std::stof(require_value(a));
         }
         else if (a == "--alpha-edges") {
-            opt.alpha_sum_edges = std::stof(require_value(a));
+            opt.alpha_edges = std::stof(require_value(a));
         }
         else {
             throw std::runtime_error("Unknown flag: " + a);
@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
         std::cout << "warmup_steps: " << opt.warmup_steps << "\n";
         std::cout << "alpha_sum_vocab:    " << opt.alpha_sum_vocab << "\n";
         std::cout << "alpha_sum_topics:    " << opt.alpha_sum_topics << "\n";
-        std::cout << "alpha_sum_edges:    " << opt.alpha_sum_edges << "\n";
+        std::cout << "alpha_edges:    " << opt.alpha_edges << "\n";
     
     	//Parse command line arguments
         std::string src_blobs_file = opt.input_dir + "/src_blobs.txt";
@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
         std::cout << "Made Text network" << std::endl;
 
         //Initialize model
-        CollapsedGibbsSocLDA model(text_network, opt.topics, opt.alpha_sum_topics, opt.alpha_sum_vocab, opt.alpha_sum_edges, output_dir);
+        CollapsedGibbsSocLDA model(text_network, opt.topics, opt.alpha_sum_topics, opt.alpha_sum_vocab, opt.alpha_edges, output_dir);
         std::cout << "Initalized" << std::endl;
 
         //Run Gibbs sampler

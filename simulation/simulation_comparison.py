@@ -27,7 +27,6 @@ def read3D(file_loc):
             for j in range(dim2s[i]):
                 output[i].append([])
                 for k in range(dim3s[i][j]):
-                    print(i,j,k)
                     output[i][j].append(float(body[pos]))
                     pos += 1
     return np.array(output)
@@ -67,9 +66,6 @@ def produce_samples_beta(iter_results):
     num_iters = iter_results.shape[0]
     num_vectors = iter_results.shape[1]
     vector_size = iter_results.shape[2]
-    print("num_iters", num_iters)
-    print("num_vectors", num_vectors)
-    print("vector_size", vector_size)
     
     posterior = np.zeros((num_iters, num_vectors, vector_size))
     for cur_iter in range(0, num_iters):
@@ -81,12 +77,10 @@ def produce_samples_beta(iter_results):
     return posterior
 
 def compare_spec(ground_truth, iter_results, name):
+    print(ground_truth)
     num_iters = iter_results.shape[0]
     num_vectors = iter_results.shape[1]
     vector_size = iter_results.shape[2]
-    print("ground_truth: ", ground_truth)
-    print("iter_results first_dim: ", iter_results[:, 0, 0])
-    print("iter_results second_dim: ", iter_results[10, :, :])
     if num_vectors > 10:
         sub_sample_vectors = random.sample(list(range(num_vectors)), k=10)
     else:

@@ -23,7 +23,7 @@ public:
     // Hyperparameters
     double alpha_phi;
     double alpha_theta;
-    double alpha_sum_edges;
+    double alpha_edges;
     double alpha_psi;
     double lambda_theta;
     double lambda_psi;
@@ -58,7 +58,7 @@ public:
     std::mt19937 gen;
 
     // Constructor
-    CollapsedGibbsSocLDA(const TextNetwork& text_network, int n_topic, float alpha_sum_topics, float alpha_sum_vocab, float alpha_sum_edges, const std::string& out_dir); 
+    CollapsedGibbsSocLDA(const TextNetwork& text_network, int n_topic, float alpha_sum_topics, float alpha_sum_vocab, float alpha_edges, const std::string& out_dir); 
 
     // Gibbs sampling function
     void run_gibbs(int n_gibbs, int n_warmup, bool verbose);

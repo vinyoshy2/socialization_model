@@ -9,11 +9,11 @@
 
 
 // Constructor
-CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int n_topic, float alpha_sum_topics, float alpha_sum_vocab, float alpha_sum_edges, const std::string& out_dir) 
+CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int n_topic, float alpha_sum_topics, float alpha_sum_vocab, float alpha_edges, const std::string& out_dir) 
     : text_network(text_network), V(text_network.vocab_size), k(n_topic),
         src_M(text_network.src_blobs.size()), tgt_M(text_network.tgt_blobs.size()),
         src_L(text_network.num_src_subreddits), tgt_L(text_network.num_tgt_subreddits),
-        alpha_phi(alpha_sum_vocab / text_network.vocab_size), alpha_theta(alpha_sum_topics / n_topic), alpha_psi(alpha_sum_topics / n_topic), alpha_sum_edges(alpha_sum_edges),
+        alpha_phi(alpha_sum_vocab / text_network.vocab_size), alpha_theta(alpha_sum_topics / n_topic), alpha_psi(alpha_sum_topics / n_topic), alpha_edges(alpha_edges),
         lambda_theta(1.0), lambda_psi(1.0), output_dir(out_dir) {
     
     // prepare rng
@@ -133,7 +133,7 @@ std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_gamma() {
         for (size_t i = 0; i < num_edges; ++i) {
             int edge = text_network.edges[d][i];
             // double sum_val = 0.0;
-            double numerator = tmp_counts[d][edge] + (alpha_sum_edges/num_edges);
+            double numerator = tmp_counts[d][edge] + (alpha_edges);
             /*double denominator = 0.0;
             for (int j = 0; j < src_L; ++j) {
                 denominator += tmp_counts[d][j][iter - num_warmup];
@@ -388,9 +388,6 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs, int n_warmup) {
         }
 
     }
-    for (int r = 0; r < tgt_L; r++) {
-        std::cout << forced_innovation_count[r] << std::endl;
-    }
 
     std::cout << "Writing params" << std::endl;
     init3D(output_dir + "/gamma.txt", n_gibbs - n_warmup, tgt_M, std::vector<int>(tgt_M, src_L));
@@ -408,7 +405,7 @@ std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, i
         int i = text_network.edges[d][ind];
 
         double _1 = (c_t_[i][t] + ct[i][t] + alpha_theta) / (src_N[i] + c_sum[i] + k * alpha_theta);
-        double _2 = (dc[d][i] + (alpha_sum_edges/edge_count)) / (d_cited_sum[d] + edge_count * (alpha_sum_edges/edge_count));
+        double _2 = (dc[d][i] + (alpha_edges)) / (d_cited_sum[d] + edge_count * (alpha_edges));
         double _3 = (r0_sum[r] + lambda_theta)
                     / (r0_sum[r] + r1_sum[r] - forced_innovation_count[r] + lambda_theta + lambda_psi);
 

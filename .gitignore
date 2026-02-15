@@ -1,4 +1,8 @@
 data
-covid.def
-covid.sif
+
+models
+model.def
+model.sif
+
 socialization
+socialization-opt

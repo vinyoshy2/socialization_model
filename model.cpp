@@ -23,11 +23,14 @@ CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int 
     // Initialize src_N and tgt_N
     src_N.resize(src_M);
     tgt_N.resize(tgt_M);
+    int tokens = 0;
     for (int i = 0; i < src_M; ++i) {
         src_N[i] = text_network.src_blobs[i].size();
+        tokens += src_N[i];
     }
     for (int i = 0; i < tgt_M; ++i) {
         tgt_N[i] = text_network.tgt_blobs[i].size();
+        tokens += tgt_N[i];
     } 
 
     std::cout << "n_topic: " << n_topic << std::endl;
@@ -36,6 +39,7 @@ CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int 
     std::cout << "src_M: " << src_M << std::endl;
     std::cout << "tgt_L: " << tgt_L << std::endl;
     std::cout << "V: " << V << std::endl;
+    std::cout << "Tokens: " << tokens << std::endl;
     // Initialize count matrices
     dc.resize(tgt_M, std::vector<int>(src_L + 1, 0));
     ct.resize(src_L + 1, std::vector<int>(k, 0));
@@ -67,6 +71,7 @@ void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, int n_warmup, bool verbose) {
     using std::chrono::duration;
     using std::chrono::milliseconds;
 
+    auto t_start = high_resolution_clock::now();
     auto t1 = high_resolution_clock::now();
     // Run Gibbs sampler
     for (int iter = 0; iter < n_gibbs; ++iter) {
@@ -112,6 +117,10 @@ void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, int n_warmup, bool verbose) {
             append2D(output_dir + "/lambda.txt", lambda);
         }
     }
+
+    auto t_end = high_resolution_clock::now();
+    duration<double, std::milli> total_ms = t_end - t_start;
+    std::cout  << "TOTAL TIME: " << total_ms.count() << "ms" << std::endl;
 }
 
 std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_gamma() {

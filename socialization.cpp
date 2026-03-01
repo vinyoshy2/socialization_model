@@ -101,12 +101,14 @@ int main(int argc, char** argv) {
         std::string tgt_blobs_file = opt.input_dir + "/tgt_blobs.txt";
         std::string edges_file = opt.input_dir + "/edges.txt";
         std::string subreddits_file = opt.input_dir + "/subreddits.txt";
+        std::string subgroups_file = opt.input_dir + "/subgroups.txt";
         std::string output_dir = opt.output_dir;
 
         //Read dataset in from file
         std::vector<std::vector<int>> src_blobs = read2D(src_blobs_file);
         std::vector<std::vector<int>> tgt_blobs = read2D(tgt_blobs_file);
         std::vector<int> tgt_subreddits = read1D(subreddits_file);  
+        std::vector<int> tgt_subgroups = read1D(subgroups_file);  
         std::vector<std::vector<int>> edges = read2D(edges_file);
 
         int iterations = opt.iterations;
@@ -117,6 +119,8 @@ int main(int argc, char** argv) {
         //deduce number of target subreddits from subreddits vector
         //num subreddits is 1 larger than the largest subreddit index
         int num_tgt_subreddits = *max_element(tgt_subreddits.begin(), tgt_subreddits.end()) + 1;
+        int num_tgt_subgroups = *max_element(tgt_subgroups.begin(), tgt_subgroups.end()) + 1;
+    
     
         //deduce number of target subreddits src_blobs and tgt_blobs
         int vocab_size = -1;
@@ -136,7 +140,7 @@ int main(int argc, char** argv) {
         //vocab size is 1 larger than the largest word index
         vocab_size++;
 
-        const TextNetwork text_network = {src_blobs, tgt_blobs, edges, tgt_subreddits, vocab_size, num_src_subreddits, num_tgt_subreddits};    
+        const TextNetwork text_network = {src_blobs, tgt_blobs, edges, tgt_subreddits, tgt_subgroups, vocab_size, num_src_subreddits, num_tgt_subreddits, num_tgt_subgroups};    
         std::cout << "Made Text network" << std::endl;
 
         //Initialize model

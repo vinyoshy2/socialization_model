@@ -19,7 +19,7 @@ class TextNetwork:
             for word in blob:
                 num_words = max(num_words, word)
         return num_words+1
-    def __init__(self, src_blobs, tgt_blobs, edges, subreddits):
+    def __init__(self, src_blobs, tgt_blobs, edges, subreddits, subgroups):
         """
             src_blobs: List of lists. Each list contains words associated with a particular source subreddit
             tgt_blobs: List of lists. Each list contains words associated with a particular target subreddit,user pair
@@ -30,9 +30,11 @@ class TextNetwork:
         self.tgt_blobs = tgt_blobs
         self.edges = edges
         self.subreddits = subreddits
+        self.subgroups = subgroups
         self.vocab_size = self.compute_vocab_size(src_blobs, tgt_blobs)
         self.num_src_subreddits = len(src_blobs)
         self.num_tgt_subreddits = max(subreddits) + 1
+        self.num_tgt_groups = max(subgroups) + 1
 
     def write_2d_mat(self, loc, mat):
         with open(loc, "w+") as f:
@@ -53,16 +55,18 @@ class TextNetwork:
         self.write_2d_mat(folder + "/tgt_blobs.txt", self.tgt_blobs)
         self.write_2d_mat(folder + "/edges.txt", self.edges)
         self.write_1d_mat(folder + "/subreddits.txt", self.subreddits)
+        self.write_1d_mat(folder + "/subgroups.txt", self.subgroups)
 
 
 class ModelSpecification:
-    def __init__(self, num_src_docs, src_doc_sizes, num_tgt_subreddits, num_tgt_comments, tgt_comment_sizes,
+    def __init__(self, num_src_docs, src_doc_sizes, num_tgt_groups, num_tgt_subreddits, num_tgt_comments, tgt_comment_sizes,
                  num_topics, vocab_size, vocab_vectors, src_topic_vectors, tgt_subreddit_topic_vectors,
                  edge_list, edge_weights, coin_flip_probs):
         self.num_src_docs = num_src_docs
         self.src_doc_sizes = src_doc_sizes
         self.num_tgt_subreddits = num_tgt_subreddits
-        self.num_tgt_comments_per_sub = num_tgt_comments
+        self.num_tgt_groups_per_sub = num_tgt_groups
+        self.num_tgt_comments_per_group = num_tgt_comments
         self.tgt_comment_sizes = tgt_comment_sizes
         self.num_topics = num_topics
         self.vocab_size = vocab_size
@@ -77,7 +81,8 @@ class ModelSpecification:
             "num_src_docs": self.num_src_docs,
             "src_doc_sizes": self.src_doc_sizes,
             "num_tgt_subreddits": self.num_tgt_subreddits,
-            "num_tgt_comments_per_sub": self.num_tgt_comments_per_sub,
+            "num_tgt_groups_per_sub": self.num_tgt_groups_per_sub,
+            "num_tgt_comments_per_group": self.num_tgt_comments_per_group,
             "tgt_comment_sizes": self.tgt_comment_sizes,
             "self.num_topics": self.num_topics,
             "vocab_size": self.vocab_size,
@@ -96,7 +101,7 @@ class ModelSpecification:
 def genNetwork(model_spec):
     src_blobs = []
     # generate source documents
-    print("Generator source docs...")
+    print("Generating source docs...")
     for i in range(0, model_spec.num_src_docs):
         if i % 20 == 0:
             print("{} out of {}...".format(i, model_spec.num_src_docs))
@@ -108,57 +113,74 @@ def genNetwork(model_spec):
             cur_blob.append(cur_word)
         src_blobs.append(cur_blob)
     # generate tgt comments
-    flattened_ind = 0
     tgt_blobs = []
     tgt_subreddits = []
+    tgt_groups = [] 
+    group_ind = 0
+    doc_ind = 0 
+    total_docs = 0
+
+    #compute total number of docs
+    for i in range(0, model_spec.num_tgt_subreddits):
+        for j in range(0, model_spec.num_tgt_groups_per_sub[i]):
+            for k in range(0, model_spec.num_tgt_comments_per_group[j]):
+                total_docs += 1
+    
     print("Generating target docs...")
     for i in range(0, model_spec.num_tgt_subreddits):
-        for j in range(0, model_spec.num_tgt_comments_per_sub[i]):
-            total_ind = sum(model_spec.num_tgt_comments_per_sub[:i]) + j
-            if total_ind % 100 == 0:
-                print("{} out of {}...".format(total_ind, model_spec.num_tgt_comments_per_sub[0]*model_spec.num_tgt_subreddits))
-            tgt_subreddits.append(i)
-            cur_blob_size = model_spec.tgt_comment_sizes[flattened_ind]
-            cur_blob = []
-            for k in range(0, cur_blob_size):
-                innovate = np.random.binomial(1, model_spec.coin_flip_probs[i])
-                if innovate == 1 or len(model_spec.edge_list[flattened_ind]) == 0:
-                    topic_vector = model_spec.tgt_subreddit_topic_vectors[i]
-                else:
-                    src_subreddit = np.random.choice(model_spec.edge_list[flattened_ind], p=model_spec.edge_weights[flattened_ind])
-                    topic_vector = model_spec.src_topic_vectors[src_subreddit]
-                cur_topic = np.random.choice(list(range(model_spec.num_topics)), p = topic_vector)
-                vocab_vector = model_spec.vocab_vectors[cur_topic]
-                cur_word = np.random.choice(list(range(model_spec.vocab_size)), p = vocab_vector)
-                cur_blob.append(cur_word)
-            flattened_ind += 1
-            tgt_blobs.append(cur_blob)
-    return TextNetwork(src_blobs, tgt_blobs, model_spec.edge_list, tgt_subreddits)
+        for j in range(0, model_spec.num_tgt_groups_per_sub[i]):
+            for k in range(0, model_spec.num_tgt_comments_per_group[j]):
+                if doc_ind % 100 == 0:
+                    print("{} out of {}...".format(doc_ind, total_docs))
+                tgt_subreddits.append(i)
+                tgt_groups.append(group_ind)
+                cur_blob_size = model_spec.tgt_comment_sizes[doc_ind]
+                cur_blob = []
+                for k in range(0, cur_blob_size):
+                    innovate = np.random.binomial(1, model_spec.coin_flip_probs[group_ind])
+                    if innovate == 1 or len(model_spec.edge_list[doc_ind]) == 0:
+                        topic_vector = model_spec.tgt_subreddit_topic_vectors[i]
+                    else:
+                        src_subreddit = np.random.choice(model_spec.edge_list[doc_ind], p=model_spec.edge_weights[doc_ind])
+                        topic_vector = model_spec.src_topic_vectors[src_subreddit]
+                    cur_topic = np.random.choice(list(range(model_spec.num_topics)), p = topic_vector)
+                    vocab_vector = model_spec.vocab_vectors[cur_topic]
+                    cur_word = np.random.choice(list(range(model_spec.vocab_size)), p = vocab_vector)
+                    cur_blob.append(cur_word)
+                doc_ind += 1
+                tgt_blobs.append(cur_blob)
+            group_ind +=1
+    return TextNetwork(src_blobs, tgt_blobs, model_spec.edge_list, tgt_subreddits, tgt_groups)
 
-def gen_specification(src_subs, tgt_subs, authors_per_tgt_sub, vocab_size, src_doc_size,
+def gen_specification(src_subs, tgt_subs, tgt_groups_per_sub, authors_per_tgt_group, vocab_size, src_doc_size,
                       tgt_doc_size, num_topics, edge_max):
  
     src_doc_sizes = [src_doc_size for i in range(0, src_subs)]
-    tgt_comment_sizes = [tgt_doc_size for i in range(0, tgt_subs*authors_per_tgt_sub)]
-    num_tgt_comments = [authors_per_tgt_sub for i in range(0, tgt_subs)]
+    tgt_comment_sizes = [tgt_doc_size for i in range(0,
+        tgt_subs*tgt_groups_per_sub*authors_per_tgt_group)
+    ]
+    num_tgt_groups = [tgt_groups_per_sub for i in range(0, tgt_subs)]
+    num_tgt_comments = [authors_per_tgt_group for i in range(0, tgt_subs*tgt_groups_per_sub)]
  
     phis = np.random.dirichlet([1/3 for i in range(0, vocab_size)], num_topics).tolist()
     thetas = np.random.dirichlet([1/3 for i in range(0, num_topics)], src_subs).tolist()
     psis = np.random.dirichlet([1/3 for i in range(0, num_topics)], tgt_subs).tolist()
-    lambdas = np.random.beta(1,1,tgt_subs).tolist()
+    lambdas = np.random.beta(1,1,tgt_subs*tgt_groups_per_sub).tolist()
     edge_lists = []
     gammas = []
     for tgt_sub in range(tgt_subs):
-        for author in range(authors_per_tgt_sub):
-            num_edges = np.random.randint(0, edge_max)
-            cur_edges = random.sample(list(range(src_subs)), k=num_edges)
-            cur_edges.sort()
-            edge_lists.append(cur_edges)
-            gammas.append(np.random.dirichlet([1/3 for i in range(len(cur_edges))]).tolist())
+        for group in range(tgt_groups_per_sub):
+            for author in range(authors_per_tgt_group):
+                num_edges = np.random.randint(0, edge_max)
+                cur_edges = random.sample(list(range(src_subs)), k=num_edges)
+                cur_edges.sort()
+                edge_lists.append(cur_edges)
+                gammas.append(np.random.dirichlet([1/3 for i in range(len(cur_edges))]).tolist())
     return ModelSpecification(
                 num_src_docs=src_subs,
                 src_doc_sizes=src_doc_sizes,
                 num_tgt_subreddits=tgt_subs,
+                num_tgt_groups=num_tgt_groups,
                 num_tgt_comments=num_tgt_comments,
                 tgt_comment_sizes=tgt_comment_sizes,
                 num_topics=num_topics,
@@ -173,7 +195,7 @@ def gen_specification(src_subs, tgt_subs, authors_per_tgt_sub, vocab_size, src_d
 
 def main():
     dir_name = sys.argv[1]
-    model_spec = gen_specification(src_subs=3, tgt_subs=3, authors_per_tgt_sub=4, vocab_size=5, src_doc_size=5000, tgt_doc_size=5000, num_topics=2, edge_max=3)
+    model_spec = gen_specification(src_subs=10, tgt_subs=5, tgt_groups_per_sub = 2, authors_per_tgt_group=50, vocab_size=500, src_doc_size=500, tgt_doc_size=100, num_topics=10, edge_max=10)
 
     textNetwork = genNetwork(model_spec)
     textNetwork.write_to_files("{}".format(dir_name))

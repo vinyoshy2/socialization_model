@@ -12,7 +12,7 @@
 CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int n_topic, float alpha_sum_topics, float alpha_sum_vocab, float alpha_edges, const std::string& out_dir) 
     : text_network(text_network), V(text_network.vocab_size), k(n_topic),
         src_M(text_network.src_blobs.size()), tgt_M(text_network.tgt_blobs.size()),
-        src_L(text_network.num_src_subreddits), tgt_L(text_network.num_tgt_subreddits),
+        src_L(text_network.num_src_subreddits), tgt_L(text_network.num_tgt_subreddits), tgt_G(text_network.num_tgt_subgroups),
         alpha_phi(alpha_sum_vocab / text_network.vocab_size), alpha_theta(alpha_sum_topics / n_topic), alpha_psi(alpha_sum_topics / n_topic), alpha_edges(alpha_edges),
         lambda_theta(1.0), lambda_psi(1.0), output_dir(out_dir) {
     
@@ -38,6 +38,7 @@ CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int 
     std::cout << "src_L: " << src_L << std::endl;
     std::cout << "src_M: " << src_M << std::endl;
     std::cout << "tgt_L: " << tgt_L << std::endl;
+    std::cout << "tgt_G: " << tgt_G << std::endl;
     std::cout << "V: " << V << std::endl;
     std::cout << "Tokens: " << tokens << std::endl;
     // Initialize count matrices
@@ -46,11 +47,13 @@ CollapsedGibbsSocLDA::CollapsedGibbsSocLDA(const TextNetwork& text_network, int 
     rts.resize(tgt_L, std::vector<std::vector<int>>(k, std::vector<int>(2, 0)));
     c_t_.resize(src_M, std::vector<int>(k, 0));
     wt.resize(V, std::vector<int>(k, 0));
-    forced_innovation_count.resize(tgt_L, 0);
+    forced_innovation_count.resize(tgt_G, 0);
 
     // Initialize matrix row/column sum counts
     c_sum.resize(src_L + 1, 0);
     d_cited_sum.resize(tgt_M, 0);
+    g0_sum.resize(tgt_G, 0);
+    g1_sum.resize(tgt_G, 0);
     r0_sum.resize(tgt_L, 0);
     r1_sum.resize(tgt_L, 0);
     t_sum.resize(k, 0);
@@ -87,11 +90,12 @@ void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, int n_warmup, bool verbose) {
         for (int d = 0; d < tgt_M; ++d) {
             for (int n = 0; n < tgt_N[d]; ++n) {
                 int r = text_network.tgt_subreddits[d];
-                update_t(d, n, r);
-                update_cs(d, n, r);
+                int g = text_network.tgt_subgroups[d];
+                update_t(d, n, r, g);
+                update_cs(d, n, r, g);
             }
         }
-        
+       
         // Print progress every 200 iterations
         if (verbose && (iter + 1) % 200 == 0) {
             std::cout << "\n===== ITERATION " << iter << " =====" << std::endl;
@@ -269,20 +273,20 @@ std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_theta() {
 }
 
 std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_lambda() {
-    std::vector<std::vector<double>> lambdas(tgt_L, std::vector<double>(2, 0.0));
-    std::vector<std::vector<double>> tmp_counts(tgt_L, std::vector<double>(2, 0.0));
+    std::vector<std::vector<double>> lambdas(tgt_G, std::vector<double>(2, 0.0));
+    std::vector<std::vector<double>> tmp_counts(tgt_G, std::vector<double>(2, 0.0));
 
     // Collect counts from target network
     for (int d = 0; d < tgt_M; ++d) {
-        int subreddit = text_network.tgt_subreddits[d];  // Get subreddit index
+        int subgroup = text_network.tgt_subgroups[d];  // Get subreddit index
         for (int n = 0; n < tgt_N[d]; ++n) {
             int cur_s = assign_s[d][n];
-            tmp_counts[subreddit][cur_s] += 1.0;
+            tmp_counts[subgroup][cur_s] += 1.0;
         }
     }
 
     // Compute lambda values
-    for (int r = 0; r < tgt_L; ++r) {
+    for (int g = 0; g < tgt_G; ++g) {
         double sum_cite = 0;
         double sum_inno = 0;
         /*double denom = 0.0;
@@ -291,9 +295,9 @@ std::vector<std::vector<double>> CollapsedGibbsSocLDA::recover_lambda() {
         }
         denom -= forced_innovation_count[r];
         denom += lambda_theta + lambda_psi;*/
-        lambdas[r][0] += (tmp_counts[r][0] + lambda_theta);
+        lambdas[g][0] += (tmp_counts[g][0] + lambda_theta);
         // / denom;
-        lambdas[r][1] += (tmp_counts[r][1] - forced_innovation_count[r] + lambda_psi);
+        lambdas[g][1] += (tmp_counts[g][1] - forced_innovation_count[g] + lambda_psi);
         // / denom;
     }
     return lambdas;
@@ -331,6 +335,8 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs, int n_warmup) {
     fill(d_cited_sum.begin(), d_cited_sum.end(), 0);
     fill(r0_sum.begin(), r0_sum.end(), 0);
     fill(r1_sum.begin(), r1_sum.end(), 0);
+    fill(g0_sum.begin(), g0_sum.end(), 0);
+    fill(g1_sum.begin(), g1_sum.end(), 0);
     fill(t_sum.begin(), t_sum.end(), 0);
 
     // Random number generator
@@ -355,13 +361,14 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs, int n_warmup) {
     // Initialize values for each tgt comment
     for (int d = 0; d < tgt_M; ++d) {
         int r = text_network.tgt_subreddits[d];
+        int g = text_network.tgt_subgroups[d];
         for (int n = 0; n < tgt_N[d]; ++n) {
             int w_dn = text_network.tgt_blobs[d][n];
 
             // Assign innovation flag (s)
             if (text_network.edges[d].empty()) {
                 assign_s[d][n] = 1;
-                forced_innovation_count[r]++;
+                forced_innovation_count[g]++;
             } else {
                 assign_s[d][n] = binary_dist(gen);
             }
@@ -390,8 +397,10 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs, int n_warmup) {
             t_sum[cur_t]++;
             if (cur_s == 0) {
                 d_cited_sum[d]++;
+                g0_sum[g]++;
                 r0_sum[r]++;
             } else {
+                g1_sum[g]++;
                 r1_sum[r]++;
             }
         }
@@ -403,10 +412,10 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs, int n_warmup) {
     init3D(output_dir + "/psi.txt", n_gibbs - n_warmup, tgt_L, std::vector<int>(tgt_L, k));
     init3D(output_dir + "/phi.txt", n_gibbs - n_warmup, k, std::vector<int>(k, V));
     init3D(output_dir + "/theta.txt", n_gibbs - n_warmup, src_L, std::vector<int>(src_L, k));
-    init3D(output_dir + "/lambda.txt", n_gibbs - n_warmup, tgt_L, std::vector<int>(tgt_L, 2));
+    init3D(output_dir + "/lambda.txt", n_gibbs - n_warmup, tgt_G, std::vector<int>(tgt_G, 2));
 }
 
-std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, int r, int t, bool print) {
+std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, int r, int g, int t, bool print) {
     size_t edge_count = text_network.edges[d].size();
     std::vector<double> prob(edge_count + 1, 0.0);
 
@@ -415,15 +424,15 @@ std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, i
 
         double _1 = (c_t_[i][t] + ct[i][t] + alpha_theta) / (src_N[i] + c_sum[i] + k * alpha_theta);
         double _2 = (dc[d][i] + (alpha_edges)) / (d_cited_sum[d] + edge_count * (alpha_edges));
-        double _3 = (r0_sum[r] + lambda_theta)
-                    / (r0_sum[r] + r1_sum[r] - forced_innovation_count[r] + lambda_theta + lambda_psi);
+        double _3 = (g0_sum[g] + lambda_theta)
+                    / (g0_sum[g] + g1_sum[g] - forced_innovation_count[g] + lambda_theta + lambda_psi);
 
         prob[ind] = _1 * _2 * _3;
     }
 
     double _1 = (rts[r][t][1] + alpha_psi) / (r1_sum[r] + k * alpha_psi);
-    double _2 = (r1_sum[r] - forced_innovation_count[r] + lambda_psi) 
-                / (r0_sum[r] + r1_sum[r] - forced_innovation_count[r] + lambda_theta + lambda_psi);
+    double _2 = (g1_sum[g] - forced_innovation_count[g] + lambda_psi) 
+                / (g0_sum[g] + g1_sum[g] - forced_innovation_count[g] + lambda_theta + lambda_psi);
     prob[edge_count] = _1 * _2;
 
     double prob_sum = std::accumulate(prob.begin(), prob.end(), 0.0);
@@ -432,7 +441,7 @@ std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, i
     return prob;
 }
 
-std::vector<double> CollapsedGibbsSocLDA::conditional_prob_t(int w_dn, int d, int r, int c, int s) {
+std::vector<double> CollapsedGibbsSocLDA::conditional_prob_t(int w_dn, int d, int r, int g, int c, int s) {
     std::vector<double> prob(k, 0.0);
 
     for (int i = 0; i < k; i++) {
@@ -470,7 +479,7 @@ std::vector<double> CollapsedGibbsSocLDA::conditional_prob_t_(int w_c_n, int c_)
 }
 
 
-void CollapsedGibbsSocLDA::update_cs(int d, int n, int r) {
+void CollapsedGibbsSocLDA::update_cs(int d, int n, int r, int g) {
     if (text_network.edges[d].empty()) {
         // assign_c[d][n][cs_iter + 1] = assign_c[d][n][cs_iter];
         // assign_s[d][n][cs_iter + 1] = assign_s[d][n][cs_iter];
@@ -493,13 +502,15 @@ void CollapsedGibbsSocLDA::update_cs(int d, int n, int r) {
     c_sum[i_c]--;
     if (i_s == 0) {
         d_cited_sum[d]--;
+        g0_sum[g]--;
         r0_sum[r]--;
     } else {
+        g1_sum[g]--;
         r1_sum[r]--;
     }
 
     // Compute new assignment probabilities
-    std::vector<double> prob = conditional_prob_cs(w_dn, d, r, i_t, d==0 && n==0);
+    std::vector<double> prob = conditional_prob_cs(w_dn, d, r, g, i_t, d==0 && n==0);
     
     /*if (d == 0 && n == 0) {
         for (int counter = 0; counter < edges.size()+1; counter++ ) {
@@ -518,8 +529,10 @@ void CollapsedGibbsSocLDA::update_cs(int d, int n, int r) {
     c_sum[new_c]++;
     if (new_s == 0) {
         d_cited_sum[d]++;
+        g0_sum[g]++;
         r0_sum[r]++;
     } else {
+        g1_sum[g]++;
         r1_sum[r]++;
     }
 
@@ -527,7 +540,7 @@ void CollapsedGibbsSocLDA::update_cs(int d, int n, int r) {
     assign_s[d][n] = new_s;
 }
 
-void CollapsedGibbsSocLDA::update_t(int d, int n, int r) {
+void CollapsedGibbsSocLDA::update_t(int d, int n, int r, int g) {
     int w_dn = text_network.tgt_blobs[d][n];
 
     int i_t = assign_t[d][n];
@@ -541,7 +554,7 @@ void CollapsedGibbsSocLDA::update_t(int d, int n, int r) {
     t_sum[i_t]--;
 
     // Compute new assignment probabilities
-    std::vector<double> prob = conditional_prob_t(w_dn, d, r, i_c, i_s);
+    std::vector<double> prob = conditional_prob_t(w_dn, d, r, g, i_c, i_s);
     int i_tp1 = weighted_sample(prob, gen);
 
     // Increment counters

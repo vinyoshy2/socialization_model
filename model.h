@@ -19,6 +19,7 @@ public:
     int tgt_M;
     int src_L;
     int tgt_L;
+    int tgt_G;
 
     // Hyperparameters
     double alpha_phi;
@@ -44,6 +45,8 @@ public:
     std::vector<int> d_cited_sum;
     std::vector<int> r0_sum;
     std::vector<int> r1_sum;
+    std::vector<int> g0_sum;
+    std::vector<int> g1_sum;
     std::vector<int> t_sum;
 
     // Gibbs sampler assignment matrices
@@ -74,15 +77,15 @@ private:
 
     void init_gibbs(int n_gibbs, int n_warmup);
 
-    std::vector<double> conditional_prob_cs(int w_dn, int d, int r, int t, bool print);
+    std::vector<double> conditional_prob_cs(int w_dn, int d, int r, int g, int t, bool print);
 
-    std::vector<double> conditional_prob_t(int w_dn, int d, int r, int c, int s);
+    std::vector<double> conditional_prob_t(int w_dn, int d, int r, int g, int c, int s);
 
     std::vector<double> conditional_prob_t_(int w_c_n, int c_);
 
-    void update_cs(int d, int n, int r);
+    void update_cs(int d, int n, int r, int g);
 
-    void update_t(int d, int n, int r);
+    void update_t(int d, int n, int r, int g);
 
     void update_t_(int c_, int n);
 };

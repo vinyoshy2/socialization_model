@@ -10,10 +10,7 @@ import random
 
 INPUTS_FOLDER = sys.argv[1]
 RESULTS_FOLDER = sys.argv[2]
-MONTH = int(sys.argv[3])
-RESULTS_FOLDER = "{}/{}/".format(RESULTS_FOLDER, MONTH)
-INPUTS_FOLDER = "{}/{}/".format(INPUTS_FOLDER, MONTH)
-SUBREDDIT_NAMES = {0: "coronavirus", 1: "china_flu"}
+OUTPUTS_FOLDER = sys.argv[3]
 
 
 #don't use this function long term, i think theres some incorrect approximinations (mean of means type stuff)
@@ -134,23 +131,59 @@ def readJSON(file_loc):
         data = json.load(f)
     return data
 
-def remap_vector(vector, topk, idx2vocab=None):
-    if idx2vocab != None:
-        pairs = [(idx2vocab[str(j)], value) for j, value in enumerate(vector)]
-    else:
-        pairs = [(j, value) for j, value in enumerate(vector)]
-    pairs.sort(key = lambda x: x[1], reverse=True)
-    return pairs[:topk]
+def top_k_cite(row, k, idx2str):
+    indices = list(range(len(row))
+    indices = sorted(indices, key = lambda x: row[x], reverse=True)
+    pos = 0
+    ret_val = {}
+    while pos < k:
+        ret_val[idx2str[pos]] = row[pos]
+        pos += 1
+    return ret_val
 
-def display_topic(topic_pairs):
-    row_str = " | ".join(["{} ({})".format(pair[0], pair[1]) for pair in topic_pairs])
-    print(row_str)
+def top_k_word_cite(row, k, idx2src_sub, idx2vocab):
+    subreddit_indices = list(range(row.shape[0]))
+    word_indices = list(range(row.shape[1]))
+    subreddit_indices = sorted(indices, key = lambda x: sum(row[x]), reverse=True)
+    sub_pos = 0
+    all_subs = {}
+    while sub_pos < k:
+        cur_sub_idx = subreddit_indices[sub_pos]
+        subreddit= idx2src_sub[cur_sub_idx]
+        all_subs[subreddit] = {}
+        word_pos = 0
+        word_indices = sorted(word_indices, key = lambda x: row[cur_sub_idx][x], reverse=True)
+        while word_pos < k:
+            cur_word_idx = word_indices[word_pos]
+            cur_word_val = row[cur_sub_idx][cur_word_idx]
+            cur_word = idx2vocab[cur_word_idx]
+            all_subs[subreddit][cur_word] = cur_word_val
+            word_pos += 1
+        sub_pos += 1
+    return all_subs
 
-def display_topics(topic_vectors):
-    for i, topic_vector in enumerate(topic_vectors):
-        print("--- Topic {} ---".format(i))
-        display_topic(topic_vector)
 
+def aggregate_and_top_k(citation_counts, k, vector_shape, top_k_func, subreddits, edges, idx2tgt_subs):
+    num_comments = len(citation_counts)
+    all_subs = list(set(subreddits))
+    results = {}
+    comment_counts = {}
+    for sub in all_subs:
+        results[sub] = np.zeros(vector_shape)
+        comment_counts[sub] = 0
+    for i in range(num_comments):
+        cur_counts = citation_counts[i]
+        cur_subreddit = subreddits[i]
+        cur_edges = edges[i]
+        cur_tgt_sub = idx2tgt_sub[cur_subreddit]
+        #only include comments who had the choice to cite ?
+        if len(cur_edges) > 0:
+            results[sub] += cur_counts
+            comment_counts[sub] += 1
+    for sub in all_subs:
+        results[sub] = results[sub] / comment_counts[sub]
+        results[sub] = top_k_func(row, k)
+    return results
 
 
 def display_document_preprocessed(documents, vocab_vectors, idx2subreddit):
@@ -188,25 +221,36 @@ if __name__ == "__main__":
     tgt_blobs = read2D("{}/tgt_blobs.txt".format(INPUTS_FOLDER))
     edges = readEdges("{}/edges.txt".format(INPUTS_FOLDER))
     subreddits = read1D("{}/subreddits.txt".format(INPUTS_FOLDER))
-    citation_counts = read_and_process_c("{}/assign_c.txt".format(INPUTS_FOLDER), lambda x, y: cited_this_iteration(x, y, len(idx2src_sub)), (len(idx2src_sub),))
-    word_citation_counts = read_and_process_c("{}/assign_c.txt".format(INPUTS_FOLDER), lambda x, y: cited_this_iteration(x, y, len(idx2src_sub)), (len(idx2src_sub), len(idx2vocab)))
+
+    #process files
+    citation_counts = read_and_process_c("{}/assign_c.txt".format(INPUTS_FOLDER),
+                                         lambda x, y: cited_this_iteration(x, y, len(idx2src_sub)),
+                                         (len(idx2src_sub),)
+                      )
+    word_citation_counts = read_and_process_c("{}/assign_c.txt".format(INPUTS_FOLDER),
+                                              lambda x, y: words_by_source(x, y, len(idx2src_sub), len(idx2vocab)),
+                                              (len(idx2src_sub), len(idx2vocab)),
+                                              tgt_blobs
+                           )
    
+
     #TO-DO: Pull top-k cites per doc, and top-k words per cite per doc
-    #TO-DO: Implement "tf-idf"'d versions of each
-
- #   for i, row in enumerate(output[0]):1
- #       if sum(row) > 1000:
- #           print("========== {} =========".format(idx2src_sub[str(i)]))
-  #          remapped = remap_vector(row, 20, idx2vocab)
-   #         display_topic(remapped)
-   # print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-    #for i, row in enumerate(output[1]):
-     #   if sum(row) > 1000:
-      #      print("========== {} =========".format(idx2src_sub[str(i)]))
-       #     remapped = remap_vector(row, 20, idx2vocab)
-        #    display_topic(remapped)
-            
-
-
-    
-
+    cites_per_doc = aggregate_and_top_k(citation_counts,
+                                        20,
+                                        (len(idx2src_sub), ),
+                                        lambda x, y: top_k_cite(x, y, idx2src_sub),
+                                        subreddits,
+                                        edges,
+                                        idx2tgt_subs):
+    words_per_cite_per_doc = top_k_words_per_cite(word_citations_counts,
+                                                  20,
+                                                  (len(idx2src_sub), len(idx2vocab)),
+                                                  lambda x, y: top_k_word_cite(x, y, idx2src_sub, idx2vocab)
+                                                  subreddits,
+                                                  edges,
+                                                  idx2tgt_sub
+                             )
+    with open("{}/top_k_cites.json".format(OUTPUTS_FOLDER), "w+") as f:
+        f.write(json.dumps(cites_per_doc, indent=4))
+    with open("{}/top_k_words_per_cite.json".format(OUTPUTS_FOLDER), "w+") as f:
+        f.write(json.dumps(words_per_cite_per_doc, indent=4))

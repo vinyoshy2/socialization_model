@@ -1,4 +1,3 @@
-#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -77,7 +76,7 @@ std::vector<std::vector<int>> read2D(std::string filename) {
     return v;
 }
 
-void write1D(std::string filename, std::vector<double> v) {
+void write1D(std::string filename, const std::vector<double>& v) {
     std::ofstream outputFile;
     outputFile.open(filename);
     
@@ -92,7 +91,7 @@ void write1D(std::string filename, std::vector<double> v) {
     outputFile.close();
 }
 
-void write2D(std::string filename, std::vector<std::vector<double>> v) {
+void write2D(std::string filename, const std::vector<std::vector<double>>& v) {
     std::ofstream outputFile;
     outputFile.open(filename);
     
@@ -116,7 +115,7 @@ void write2D(std::string filename, std::vector<std::vector<double>> v) {
 
 }
 
-void write3D(std::string filename, std::vector<std::vector<std::vector<double>>> v) {
+void write3D(std::string filename, const std::vector<std::vector<std::vector<double>>>& v) {
     std::ofstream outputFile;
     outputFile.open(filename);
     
@@ -167,15 +166,3 @@ void init3D(std::string filename, int dim1, int dim2, std::vector<int> dim3) {
     outputFile.close();
 }
 
-void append2D(std::string filename, std::vector<std::vector<double>> v) {
-    std::ofstream outputFile;
-    outputFile.open(filename, std::ios::app);
-
-    for (int i = 0; i < v.size(); i++) {
-        for (int j = 0; j < v[i].size(); j++) {
-            outputFile << v[i][j] << " ";
-        }
-        outputFile << std::endl;
-    }
-    outputFile << std::endl << std::endl;
-}

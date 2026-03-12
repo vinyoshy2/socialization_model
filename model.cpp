@@ -110,11 +110,12 @@ void CollapsedGibbsSocLDA::run_gibbs(int n_gibbs, int n_warmup, bool verbose) {
             std::vector<std::vector<double>> lambda = recover_lambda();
 
             //Save to parameters to output file   
-            append2D(output_dir + "/gamma.txt", gamma);
-            append2D(output_dir + "/psi.txt", psi);
-            append2D(output_dir + "/phi.txt", phi);
-            append2D(output_dir + "/theta.txt", theta);
+ //           append2D(output_dir + "/gamma.txt", gamma);
+   //         append2D(output_dir + "/psi.txt", psi);
+     //       append2D(output_dir + "/phi.txt", phi);
+       //     append2D(output_dir + "/theta.txt", theta);
             append2D(output_dir + "/lambda.txt", lambda);
+            append2D(output_dir + "/assign_c.txt", assign_c);
         }
     }
 
@@ -399,11 +400,13 @@ void CollapsedGibbsSocLDA::init_gibbs(int n_gibbs, int n_warmup) {
     }
 
     std::cout << "Writing params" << std::endl;
-    init3D(output_dir + "/gamma.txt", n_gibbs - n_warmup, tgt_M, std::vector<int>(tgt_M, src_L));
-    init3D(output_dir + "/psi.txt", n_gibbs - n_warmup, tgt_L, std::vector<int>(tgt_L, k));
-    init3D(output_dir + "/phi.txt", n_gibbs - n_warmup, k, std::vector<int>(k, V));
-    init3D(output_dir + "/theta.txt", n_gibbs - n_warmup, src_L, std::vector<int>(src_L, k));
+    init3D(output_dir + "/assign_c.txt", n_gibbs - n_warmup, tgt_M, tgt_N);
     init3D(output_dir + "/lambda.txt", n_gibbs - n_warmup, tgt_L, std::vector<int>(tgt_L, 2));
+    // Don't write these since we need the space for assign_c
+    //init3D(output_dir + "/gamma.txt", n_gibbs - n_warmup, tgt_M, std::vector<int>(tgt_M, src_L));
+//   init3D(output_dir + "/psi.txt", n_gibbs - n_warmup, tgt_L, std::vector<int>(tgt_L, k));
+  //  init3D(output_dir + "/phi.txt", n_gibbs - n_warmup, k, std::vector<int>(k, V));
+//    init3D(output_dir + "/theta.txt", n_gibbs - n_warmup, src_L, std::vector<int>(src_L, k));
 }
 
 std::vector<double> CollapsedGibbsSocLDA::conditional_prob_cs(int w_dn, int d, int r, int t, bool print) {
